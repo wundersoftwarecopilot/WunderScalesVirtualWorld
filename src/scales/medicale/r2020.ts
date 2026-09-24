@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, createScaleRoot, cyl, logoBadge, MAT, rbox, rectCm, tubePath, visitorWeight, visore, weighing } from '../kit';
+import { box, createScaleRoot, cyl, keep, logoBadge, MAT, rbox, rectCm, tubePath, visitorWeight, visore, weighing } from '../kit';
 import { SPECS } from '../specs';
 import type { ScaleDef } from '../types';
 
@@ -64,7 +64,7 @@ const def: ScaleDef = {
     );
 
     // Stadiometer: slider on the column + head paddle projecting over the platform.
-    const slider = new THREE.Group();
+    const slider = keep(new THREE.Group());
     cm.add(slider);
     rbox(slider, 8, 6, 5, 1, MAT.absGrey, { z: colZ + 2 });
     rbox(slider, 5, 1, 25, 0.4, MAT.abs, { y: -2.5, z: colZ + 2 + 14 });

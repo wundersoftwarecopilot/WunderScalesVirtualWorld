@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { applyEnvironment, createRenderer, detectQuality } from './core/renderer';
 import { loadCatalog } from './scales/catalog';
+import { mergeModel } from './world/batch';
 import { createPedestal } from './world/pedestal';
 
 /**
@@ -58,6 +59,9 @@ const bounds = new THREE.Box3();
 for (const def of chosen) {
   try {
     const inst = def.build();
+    const merged = mergeModel(inst.root);
+    console.info(`[lab] ${def.spec.id}: ${merged.before} meshes → ${merged.after} draw objects after merge`);
+    if (merged.after > 60) window.__lab!.errors.push(`${def.spec.id}: ${merged.after} separate meshes after merging (budget 60) — mark fewer parts keep, share materials`);
     const g = new THREE.Group();
     let baseY = 0;
     if (def.spec.placement === 'pedestal') {

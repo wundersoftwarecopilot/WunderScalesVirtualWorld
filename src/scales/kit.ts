@@ -75,6 +75,15 @@ export function emissive(color: THREE.ColorRepresentation, intensity = 1.6): THR
   return new THREE.MeshStandardMaterial({ color: '#000000', emissive: color, emissiveIntensity: intensity, roughness: 0.6 });
 }
 
+/**
+ * Mark a moving part (needle, slider, poise, door…) so the world does not merge it into the
+ * static body. Everything not marked is merged per material after build() for performance.
+ */
+export function keep<T extends THREE.Object3D>(obj: T): T {
+  obj.userData.keep = true;
+  return obj;
+}
+
 // ---------------------------------------------------------------- root
 
 export interface ScaleRoot {
@@ -447,7 +456,7 @@ export function dial(
     ticks.setMatrixAt(i, m.compose(pos, q, s));
   }
   g.add(ticks);
-  const pointer = new THREE.Group();
+  const pointer = keep(new THREE.Group());
   pointer.position.z = 0.25;
   box(pointer, 0.28, R * 0.78, 0.1, std(o.pointer ?? '#d2261a', 0.5), { y: R * 0.3, castShadow: false });
   cyl(pointer, 0.7, 0.7, 0.4, MAT.blackPlastic, { rx: 90 }, 16);

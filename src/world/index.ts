@@ -3,6 +3,7 @@ import { localRectToWorld, worldToLocalXZ } from '../core/rect';
 import { loadCatalog } from '../scales/catalog';
 import type { Line, ScaleId, ScaleSpec } from '../scales/specs';
 import type { ScaleInstance } from '../scales/types';
+import { mergeModel } from './batch';
 import { buildShell } from './building';
 import type { WorldContext } from './context';
 import { OPENINGS, ZONES, type ZoneId } from './layout';
@@ -78,6 +79,7 @@ export async function buildWorld(
     }
     const slot = slots[spec.id] ?? fallbackSlot(spec, n);
     const root = instance.root;
+    mergeModel(root);
     let baseY = 0;
 
     if (spec.placement === 'pedestal') {
