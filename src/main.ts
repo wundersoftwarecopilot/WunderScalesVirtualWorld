@@ -138,7 +138,10 @@ async function start(renderer: THREE.WebGLRenderer): Promise<void> {
     }),
   };
 
+  // Two renders per frame (world + HUD): count them together for stats.
+  renderer.info.autoReset = false;
   const loop = () => {
+    renderer.info.reset();
     const dt = Math.min(0.05, (clock.update(), clock.getDelta()));
     const t = clock.getElapsed();
     player.update(dt);

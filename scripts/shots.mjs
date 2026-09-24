@@ -3,6 +3,7 @@
  * Screenshot helper (Playwright + Chromium with SwiftShader WebGL).
  *
  *   node scripts/shots.mjs --port 5173 world lobby medicale design     # world viewpoints
+ *   node scripts/shots.mjs --port 5173 world -20,4,1.57,0.1            # x,z,yaw[,pitch] custom view
  *   node scripts/shots.mjs --port 5173 lab r2020 c202                   # single scales in lab.html
  *   node scripts/shots.mjs --port 5173 lab r2020 --angles 0,35,90,180   # several angles
  *   node scripts/shots.mjs --port 5173 line medicale                    # a whole line side by side
@@ -44,11 +45,15 @@ try {
     await page.goto(`${base}/index.html`);
     await page.waitForFunction(() => window.__wunder?.ready, null, { timeout: 180000 });
     for (const n of names.length ? names : ['plaza']) {
-      const ok = await page.evaluate((v) => window.__wunder.teleport(v), n);
+      const custom = /^-?\d/.test(n) ? n.split(',').map(Number) : null;
+      const ok = custom
+        ? await page.evaluate(([x, z, yaw, pitch]) => (window.__wunder.player.teleport(x, z, yaw, pitch ?? 0), true), custom)
+        : await page.evaluate((v) => window.__wunder.teleport(v), n);
       if (!ok) errors.push('unknown viewpoint ' + n);
       await page.waitForTimeout(1200);
-      await page.screenshot({ path: `${out}/world-${n}.png` });
-      console.log(`${out}/world-${n}.png`);
+      const file = `${out}/world-${n.replace(/[^\w.-]+/g, '_')}.png`;
+      await page.screenshot({ path: file });
+      console.log(file);
     }
     const stats = await page.evaluate(() => window.__wunder.stats());
     console.log('render stats', JSON.stringify(stats));
