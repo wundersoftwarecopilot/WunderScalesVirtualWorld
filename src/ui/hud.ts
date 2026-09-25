@@ -9,8 +9,11 @@ import { arrowGeometry } from './keysign';
  *   movement hint and the mouse-only way to walk. They dim (never vanish, never stop working) a
  *   few seconds after the visitor walks with the keyboard, and stay bright while the pointer
  *   uses them;
- * - desktop: a small mouse icon whose left button pulses ("click to look around") until the
+ * - with a mouse: a small mouse icon whose left button pulses ("click to look around") until the
  *   pointer is locked; then a crosshair in the middle, ringed in white over a logo (the logo glows);
+ * - with a finger: a small touch hint, a fingertip swiping sideways ("drag to look around") until
+ *   the visitor first turns, then two fingertips spreading ("pinch to zoom") until they first zoom.
+ *   The hints follow the pointer in use (`input.pointerType`), so a touch laptop gets the right one;
  * - the loading screen (spinning logo + progress ring) while the world is built.
  */
 function roundedRect(w: number, h: number, r: number, hole?: number): THREE.Shape {
@@ -75,6 +78,11 @@ export class Hud implements HudHitTester {
   private readonly mouseIcon = new THREE.Group();
   private readonly mouseButton: THREE.MeshBasicMaterial;
   private readonly mouseMats: THREE.MeshBasicMaterial[] = [];
+  private readonly touchHint = new THREE.Group();
+  private readonly swipeFinger: THREE.Object3D;
+  private readonly swipeChevrons: THREE.Object3D;
+  private readonly pinchFingers: [THREE.Object3D, THREE.Object3D];
+  private readonly touchMats: Array<{ m: THREE.MeshBasicMaterial; o: number }> = [];
 
   constructor(private readonly input: Input) {
     this.touch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -133,7 +141,7 @@ export class Hud implements HudHitTester {
     bg.renderOrder = -1;
     bg.name = 'loader-bg';
     this.loader.add(bg);
-    // Crosshair (pixels): a white dot with a dark rim, and a red ring shown over a logo.
+    // Crosshair (pixels): a white dot with a dark rim, and a white ring with a dark rim over a logo.
     const hudMat = (color: string, opacity = 1) =>
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, toneMapped: false });
     const rim = new THREE.Mesh(new THREE.CircleGeometry(4, 20), hudMat('#1f2226', 0.55));
@@ -181,6 +189,51 @@ export class Hud implements HudHitTester {
     this.mouseIcon.add(body, button, outline, divider, split, wheel);
     this.mouseIcon.visible = false;
     this.scene.add(this.mouseIcon);
+
+    // Touch hint (pixels, centred): a dark rounded plate like the pad's buttons; on it a white
+    // fingertip that swipes between two chevrons, or two fingertips that spread apart.
+    const tMat = (color: string, o: number) => {
+      const m = hudMat(color, o);
+      this.touchMats.push({ m, o });
+      return m;
+    };
+    const plateW = 70;
+    const plateH = 40;
+    const plate = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(plateW, plateH, 7)), tMat('#1f2226', 0.28));
+    const plateRing = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(plateW, plateH, 7, 1.2)), tMat('#ffffff', 0.9));
+    plate.renderOrder = 30;
+    plateRing.renderOrder = 31;
+    const fingerRim = tMat('#1f2226', 0.5);
+    const fingerFill = tMat('#ffffff', 0.95);
+    const fingertip = (r: number) => {
+      const g = new THREE.Group();
+      const rim = new THREE.Mesh(new THREE.CircleGeometry(r + 1.8, 24), fingerRim);
+      const fill = new THREE.Mesh(new THREE.CircleGeometry(r, 24), fingerFill);
+      rim.renderOrder = 33;
+      fill.renderOrder = 34;
+      g.add(rim, fill);
+      return g;
+    };
+    this.swipeFinger = fingertip(6.5);
+    const chevron = new THREE.Shape();
+    chevron.moveTo(0, 5);
+    chevron.lineTo(5, 0);
+    chevron.lineTo(0, -5);
+    chevron.closePath();
+    const chevronGeo = new THREE.ShapeGeometry(chevron);
+    const chevronMat = tMat('#ffffff', 0.9);
+    this.swipeChevrons = new THREE.Group();
+    for (const side of [-1, 1]) {
+      const c = new THREE.Mesh(chevronGeo, chevronMat);
+      c.position.x = side * 27;
+      c.rotation.z = side < 0 ? Math.PI : 0; // both point outwards (a turn, not a mirror: no back face)
+      c.renderOrder = 32;
+      this.swipeChevrons.add(c);
+    }
+    this.pinchFingers = [fingertip(5), fingertip(5)];
+    this.touchHint.add(plate, plateRing, this.swipeChevrons, this.swipeFinger, ...this.pinchFingers);
+    this.touchHint.visible = false;
+    this.scene.add(this.touchHint);
     input.hud = this;
   }
 
@@ -204,8 +257,10 @@ export class Hud implements HudHitTester {
       b.group.scale.setScalar(size);
     }
     this.crosshair.position.set(w / 2, h / 2, 0);
-    // Mouse icon to the right of the arrow pad, centred on its height.
-    this.mouseIcon.position.set(baseX + (size + gap) + size / 2 + 24, baseY + (size + gap) / 2, 0);
+    // Mouse icon (or touch hint) to the right of the arrow pad, centred on its height.
+    const padRight = baseX + (size + gap) + size / 2;
+    this.mouseIcon.position.set(padRight + 24, baseY + (size + gap) / 2, 0);
+    this.touchHint.position.set(padRight + gap + 35, baseY + (size + gap) / 2, 0);
     const s = Math.min(w, h) * 0.22;
     this.loader.position.set(w / 2, h / 2, 0);
     this.loaderLogo.scale.setScalar(s);
@@ -235,10 +290,14 @@ export class Hud implements HudHitTester {
   update(dt: number, t: number): void {
     this.loader.visible = this.loading;
     this.pad.visible = !this.loading;
-    const desktop = !(this.touch || this.input.usedTouch);
-    this.crosshair.visible = !this.loading && this.input.locked;
+    const inp = this.input;
+    // Hints follow the pointer in use, not what the device could do (touch laptops have both).
+    const mouse = inp.pointerType === 'mouse';
+    this.crosshair.visible = !this.loading && inp.locked;
     this.aimRing.visible = this.aimed;
-    this.mouseIcon.visible = !this.loading && desktop && !this.input.locked && !this.input.lockUnavailable;
+    this.mouseIcon.visible = !this.loading && mouse && !inp.locked && !inp.lockUnavailable;
+    const needLook = inp.lastLookAt === 0;
+    this.touchHint.visible = !this.loading && !mouse && (needLook || inp.lastZoomAt === 0);
     if (this.loading) {
       this.loaderLogo.rotation.y = Math.sin(t * 1.4) * 0.5;
       const p = THREE.MathUtils.clamp(this.progress, 0, 1);
@@ -247,11 +306,10 @@ export class Hud implements HudHitTester {
       return;
     }
     let target = 0.95;
-    if (!(this.touch || this.input.usedTouch)) {
-      // Desktop: full while the pointer uses the pad (and a while after), dimmed 4 s after
+    if (mouse) {
+      // Mouse: full while the pointer uses the pad (and a while after), dimmed 4 s after
       // keyboard walking. Never hidden: it is the only way to walk for a mouse-only visitor.
       const now = performance.now();
-      const inp = this.input;
       const padRecent = inp.padHeld || (inp.lastPadAt > 0 && now - inp.lastPadAt < 6000);
       const keysIdle = inp.lastKeyMoveAt > 0 && now - inp.lastKeyMoveAt > 4000;
       target = padRecent || !keysIdle ? 1 : DIM;
@@ -269,6 +327,21 @@ export class Hud implements HudHitTester {
       // "Click here": the left button pulses softly.
       this.mouseButton.opacity = (0.35 + 0.35 * Math.sin(t * 4)) * this.opacity + 0.1;
       for (const m of this.mouseMats) m.opacity = (m === this.mouseMats[1] ? 0.28 : 0.9) * Math.max(this.opacity, 0.6);
+    }
+    if (this.touchHint.visible) {
+      // Swipe: the fingertip glides from side to side and pauses at the ends. Pinch: two
+      // fingertips spread apart along a diagonal, then start again.
+      this.swipeFinger.visible = this.swipeChevrons.visible = needLook;
+      this.pinchFingers[0].visible = this.pinchFingers[1].visible = !needLook;
+      if (needLook) {
+        this.swipeFinger.position.x = 15 * Math.max(-1, Math.min(1, 1.4 * Math.sin(t * 2.6)));
+      } else {
+        const k = (t * 0.8) % 1;
+        const d = 4 + 14 * Math.min(1, k / 0.7);
+        this.pinchFingers[0].position.set(-d, -d * 0.45, 0);
+        this.pinchFingers[1].position.set(d, d * 0.45, 0);
+      }
+      for (const { m, o } of this.touchMats) m.opacity = o * this.opacity;
     }
   }
 }

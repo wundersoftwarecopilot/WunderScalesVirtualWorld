@@ -23,7 +23,8 @@ export interface LinkTarget {
   placed: { x: number; y: number; size: number; z: number };
 }
 
-const MAX_DIST = 26; // metres; further logos are too small to click anyway
+/** Metres at 1×; the lens zoom brings further logos close enough to click (see update()). */
+const MAX_DIST = 26;
 const MIN_PX = 14;
 
 export class LinkLayer {
@@ -103,12 +104,14 @@ export class LinkLayer {
     t.onHover?.(on);
   }
 
-  update(camera: THREE.PerspectiveCamera, width: number, height: number, locked = false): void {
+  /** `zoom`: the lens zoom (1 = normal view); a logo zoomed in on is clickable further away. */
+  update(camera: THREE.PerspectiveCamera, width: number, height: number, locked = false, zoom = 1): void {
     camera.updateMatrixWorld();
     this.projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projScreen);
     const camPos = camera.getWorldPosition(this.tmpC);
     const focal = height / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    const maxDist = MAX_DIST * Math.max(1, zoom);
 
     // Re-test occlusion for a few links per frame (round robin) to keep raycasts cheap.
     const budget = Math.min(this.links.length, 6);
@@ -132,7 +135,7 @@ export class LinkLayer {
       // camera's layer; their links go with them.
       this.sph.center.copy(center);
       this.sph.radius = radius;
-      const inView = t.object.visible && t.object.layers.test(camera.layers) && dist < MAX_DIST && this.frustum.intersectsSphere(this.sph);
+      const inView = t.object.visible && t.object.layers.test(camera.layers) && dist < maxDist && this.frustum.intersectsSphere(this.sph);
       let show = false;
       if (inView) {
         if (!t.visible) t.occluded = this.isOccluded(t, camPos); // freshly visible: test now

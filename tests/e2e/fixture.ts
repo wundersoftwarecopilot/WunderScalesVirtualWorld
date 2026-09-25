@@ -3,9 +3,11 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ARTIFACT = 'artifact/wunder-world.html';
+/** Where the fixture serves the artifact (a fake https origin, like the artifact viewer's). */
+export const ARTIFACT_URL = 'https://artifact.test/index.html';
 
-/** Serve the artifact at a fake https origin and three.js from node_modules (offline CDN). */
-export async function openArtifact(page: Page, errors: string[]): Promise<void> {
+/** Serve the artifact at ARTIFACT_URL and three.js from node_modules (offline CDN). */
+export async function routeArtifact(page: Page, errors: string[]): Promise<void> {
   if (!existsSync(ARTIFACT)) throw new Error('Run `npm run build` first');
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
@@ -31,7 +33,12 @@ export async function openArtifact(page: Page, errors: string[]): Promise<void> 
       body: `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>${body}</body></html>`,
     }),
   );
-  await page.goto('https://artifact.test/index.html');
+}
+
+/** Open the built artifact and wait for the world. `npm run e2e` rebuilds it first (pree2e). */
+export async function openArtifact(page: Page, errors: string[]): Promise<void> {
+  await routeArtifact(page, errors);
+  await page.goto(ARTIFACT_URL);
   await page.waitForFunction(() => window.__wunder?.ready === true, null, { timeout: 200_000 });
 }
 

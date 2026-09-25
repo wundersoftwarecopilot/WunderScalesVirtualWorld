@@ -165,6 +165,9 @@ async function start(renderer: THREE.WebGLRenderer): Promise<void> {
 
   hud.progress = 1;
   hud.loading = false;
+  // Look, zoom and click-to-lock start with the world: nothing made on the loading screen
+  // carries over into the first view.
+  input.enabled = true;
   ready = true;
   canvas.focus({ preventScroll: true });
 
@@ -204,7 +207,7 @@ async function start(renderer: THREE.WebGLRenderer): Promise<void> {
     renderer.render(scene, camera);
     renderer.clearDepth();
     renderer.render(hud.scene, hud.camera);
-    links.update(camera, window.innerWidth, window.innerHeight, input.locked);
+    links.update(camera, window.innerWidth, window.innerHeight, input.locked, player.zoom);
     hud.aimed = links.aimed !== null;
     frames++;
     requestAnimationFrame(loop);

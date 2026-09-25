@@ -17,10 +17,15 @@ Published as a claude.ai Artifact (`artifact/wunder-world.html`).
   stand on a museum pedestal the world creates from `SPECS[id].placement === 'pedestal'`.
 
 ## Layout
-- `src/core/` renderer, input (arrows/WASD, drag to look, touch HUD), player, collisions, link layer.
+- `src/core/` renderer, input (click = pointer-lock mouse look, Esc releases, drag fallback; wheel/pinch
+  zoom 1–4×, middle button resets; arrows/WASD only walk and strafe; touch: drag looks, pinch zooms,
+  HUD arrows walk), player, collisions, link layer (while locked the logo in the crosshair opens
+  on click). Nothing looks, zooms or locks before `input.enabled` (world ready).
 - `src/world/layout.ts` floor plan (X east, Z south, metres); `building.ts` shell; `zones/*.ts` dressing.
 - `src/scales/specs.ts` the 30 models (ids, placement, URLs, approximate sizes); one file per model
-  under `scales/{medicale,industriale,design}/<id>.ts`; `kit.ts` shared parts; `stub.ts` placeholder.
+  under `scales/{medicale,industriale,design}/<id>.ts` (default export: one ScaleDef or an array);
+  `_*.ts` files there are shared helpers with no default export; `kit.ts` shared parts; `stub.ts`
+  stands in for any missing id.
 - `docs/catalog-research.md` geometry recipes (cm) for every model.
 
 ## Scale model contract (`scales/types.ts`)
@@ -29,6 +34,8 @@ Published as a claude.ai Artifact (`artifact/wunder-world.html`).
 - `size` (m) must bound the geometry (lab checks ±35%). `standOn` for platforms you can step on
   (with `y` = platform top), `colliders` for solid parts, `weigh(active)` + `update(dt)` via
   `kit.weighing()`. Reuse `kit` parts (visore, wxHead, dial, lcd, caster, tubePath, …) and `MAT`.
+- Static parts are merged per material after build; wrap anything that moves (needle, poise,
+  slider, door) in `kit.keep()` or it is frozen into the merge.
 - Reference implementation: `scales/medicale/r2020.ts`.
 
 ## Zone contract (`world/zone.ts`)
@@ -53,4 +60,10 @@ Published as a claude.ai Artifact (`artifact/wunder-world.html`).
 - `node scripts/shots.mjs --port <port> lab <id> --angles 0,35,160` model screenshots → `shots/`
 - `node scripts/shots.mjs --port <port> world lobby medicale …` world viewpoints (layout.ts VIEWPOINTS),
   prints render stats per view; `… sweep --step 4` walks the whole world and reports the worst views
-- `npm run typecheck`, `npm test` (vitest), `npm run build` (→ artifact), `npm run e2e` (Playwright)
+- `npm run typecheck`, `npm test` (vitest), `npm run build` (→ artifact), `npm run e2e` (Playwright;
+  rebuilds the artifact first, the tests load `artifact/wunder-world.html`)
+- One test: `npx vitest run tests/unit/<file>.test.ts`, `npx playwright test -g "<name>"` (a direct
+  `playwright` run does not rebuild: `npm run build` first)
+- `npm run pages` → `site/index.html`. GitHub Pages deploys through `.github/workflows/pages.yml`
+  on push; the repo's Pages Source must be "GitHub Actions" (a branch deploy serves raw `src/`).
+- More context (boot order, links, input model, debugging hooks, open items): `Handoff.md`.

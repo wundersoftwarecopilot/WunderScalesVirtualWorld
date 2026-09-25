@@ -82,10 +82,17 @@ With the pointer locked the layer is hidden, the logo under the crosshair is `ai
 click calls `links.open()` (`anchor.click()` inside the trusted click, after releasing the lock).
 
 **Input model (`src/core/input.ts`, `player.ts`, `ui/hud.ts`)**: a mouse click on the canvas requests
-pointer lock (first-person look; Esc releases; repeated refusals fall back to drag-to-look). The wheel
-zooms 1–4× (eased, look sensitivity divided by zoom, middle button resets). Arrows/WASD only walk
+pointer lock (first-person look; Esc releases). One request at a time; each is judged 1 s later by
+its outcome (a lock that lands clears any verdict), and two refusals outside the post-Esc cooldown
+fall back to drag-to-look (sandboxed frames). The first mouse move after the lock and warp spikes
+are dropped; a locked click within 400 ms of the lock (the rest of a double-click) opens nothing.
+The wheel zooms 1–4× (eased, look sensitivity divided by zoom, middle button resets without
+opening a link); Safari's trackpad pinch arrives as `gesture*` events. Arrows/WASD only walk
 (←/→ strafe), Shift runs. Touch: one-finger drag looks, two-finger pinch zooms, the WebGL HUD arrows
-walk (a press on an arrow swallows the click of any link under it). Base FOV depends on aspect
+walk (a press on an arrow swallows the click of any link under it); a finger while the mouse is
+locked releases the lock. Nothing looks, zooms or locks before `input.enabled` (world ready). The
+HUD hints follow `input.pointerType` (the pointer in use: mouse icon or touch hint), not device
+sniffing, so touch laptops get both. Base FOV depends on aspect
 (`fovFor` in main.ts, wider on portrait phones); the player applies the zoom on top via `setBaseFov`.
 
 **Culling and visibility**: `world/portals.ts` sorts everything into rooms (star plan: plaza ↔ lobby
@@ -115,7 +122,13 @@ context restore, because three.js otherwise overrides `envMapIntensity` with the
   the names/links "960 Tarsie", the `/it/` slug of 960 Gold and NHB are unverified.
 - Small division-colour accents remain (doorway stripes, a teal line in the gallery); the owner
   has not yet said whether they may stay in an all-grey environment.
-- Everything was verified only in headless SwiftShader; real pointer lock cannot run headless, so
-  the e2e test fakes `document.pointerLockElement`. Real GPU/phone checks are still open.
-- A multi-agent review of the mouse-look change (commit 3295b08) was running when this was written;
-  check `git log` for the follow-up fixes before touching `src/core/input.ts`.
+- Everything was verified only in headless SwiftShader. Headless Chromium grants a real pointer
+  lock (after refusing `unadjustedMovement` on Linux), and the e2e suite uses it; only the mouse-delta
+  test fakes the lock, because CDP mouse moves carry no movementX/Y while locked. Safari's
+  `gesture*` pinch was only checked with emulated events. Real GPU/phone checks are still open.
+- `npm run e2e` rebuilds the artifact first (`pree2e`): the fixture loads `artifact/wunder-world.html`.
+- The mouse-look change (3295b08) went through a review from three angles (browsers, touch,
+  regressions); the commit after it fixes all 21 findings, and the e2e suite covers the real lock,
+  a sandboxed frame without lock permission, and phone look/pinch/walk. Still unchecked outside
+  Chromium: touch laptops in Firefox/Safari; the locked mouse filter drops any single move larger
+  than max(300 px, 40% of the viewport).

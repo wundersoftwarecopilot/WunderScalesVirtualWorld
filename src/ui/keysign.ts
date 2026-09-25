@@ -6,7 +6,9 @@ import type { Input, Intent } from '../core/input';
  * The small "how to move" sign, entirely geometry: a slim stand with a tilted plate carrying
  * four arrow keys (inverted T: walk and step sideways) and a mouse (look around, wheel = zoom).
  * A key glows red while it is pressed; the mouse glows while the view turns, its wheel while
- * zooming. No letters. Origin at the floor; faces +Z.
+ * zooming. For a visitor using a finger (`input.pointerType`), a phone takes the mouse's place:
+ * a fingertip swipes across its screen (drag to look) and glows while the view turns.
+ * No letters. Origin at the floor; faces +Z.
  */
 const RED = new THREE.Color('#d90000');
 const KEY_WHITE = new THREE.Color('#f7f7f7');
@@ -98,15 +100,62 @@ export function createKeySign(input: Input): { object: THREE.Group; update(dt: n
   wheel.position.set(0, 0.038, 0.018);
   mouse.add(wheel);
 
+  // Phone (touch visitors): a dark slab in the mouse's place, a white fingertip gliding across
+  // its screen between two small chevrons.
+  const phone = new THREE.Group();
+  phone.position.copy(mouse.position);
+  plate.add(phone);
+  const phoneBody = new THREE.Mesh(new RoundedBoxGeometry(0.08, 0.14, 0.012, 2, 0.006), new THREE.MeshStandardMaterial({ color: '#2a2c30', roughness: 0.35 }));
+  phoneBody.castShadow = true;
+  phone.add(phoneBody);
+  // A light screen inside a dark bezel, so the slab reads as a phone.
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.066, 0.112), new THREE.MeshBasicMaterial({ color: '#b9bec5' }));
+  screen.position.set(0, 0.002, 0.0068);
+  phone.add(screen);
+  const chevron = new THREE.Shape();
+  chevron.moveTo(0, 0.011);
+  chevron.lineTo(0.011, 0);
+  chevron.lineTo(0, -0.011);
+  chevron.closePath();
+  const chevronGeo = new THREE.ShapeGeometry(chevron);
+  for (const side of [-1, 1]) {
+    const c = new THREE.Mesh(chevronGeo, grooveMat);
+    c.position.set(side * 0.02, 0.002, 0.0074);
+    c.rotation.z = side < 0 ? Math.PI : 0;
+    phone.add(c);
+  }
+  // The fingertip: a white disc with a dark rim, gliding across the screen.
+  const tipMat = new THREE.MeshStandardMaterial({ color: '#f7f7f7', roughness: 0.4, emissive: '#d90000', emissiveIntensity: 0 });
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.008, 24), tipMat);
+  tip.rotation.x = Math.PI / 2;
+  tip.position.set(0, 0.002, 0.0115);
+  // Rim: a dark circle just above the screen, under the disc (the disc's local +Y is the phone's +Z).
+  const tipRim = new THREE.Mesh(new THREE.CircleGeometry(0.015, 24), grooveMat);
+  tipRim.position.y = -0.0035;
+  tipRim.rotation.x = -Math.PI / 2;
+  tip.add(tipRim);
+  phone.add(tip);
+  phone.visible = false;
+
   const dark = new THREE.Color('#2a2c30');
   const white = new THREE.Color('#ffffff');
+  let time = 0;
   return {
     object: g,
     update(dt: number) {
       const now = performance.now();
+      time += dt;
       const looking = now - input.lastLookAt < 250 ? 0.8 : 0;
       const zooming = now - input.lastZoomAt < 400 ? 1.2 : 0;
       const k = Math.min(1, dt * 12);
+      const touch = input.pointerType !== 'mouse';
+      mouse.visible = !touch;
+      phone.visible = touch;
+      if (touch) {
+        tipMat.emissiveIntensity += (looking - tipMat.emissiveIntensity) * k;
+        tipMat.color.lerpColors(KEY_WHITE, RED, Math.min(1, tipMat.emissiveIntensity));
+        tip.position.x = 0.012 * Math.max(-1, Math.min(1, 1.4 * Math.sin(time * 2.6)));
+      }
       mouseMat.emissiveIntensity += (looking - mouseMat.emissiveIntensity) * k;
       mouseMat.color.lerpColors(KEY_WHITE, RED, Math.min(1, mouseMat.emissiveIntensity));
       wheelMat.emissiveIntensity += (zooming - wheelMat.emissiveIntensity) * k;

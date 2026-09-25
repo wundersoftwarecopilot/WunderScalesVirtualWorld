@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build && node scripts/make-artifact.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "pree2e": "npm run build",
     "e2e": "playwright test",
     "shots": "node scripts/shots.mjs",
     "pages": "npm run build && node scripts/make-pages.mjs"
