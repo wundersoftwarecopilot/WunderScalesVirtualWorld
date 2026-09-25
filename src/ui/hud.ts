@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createLogo } from '../brand/logo';
 import type { HudHitTester, Input, Intent } from '../core/input';
 import { arrowGeometry } from './keysign';
+import { EscWatermark } from './watermark';
 
 /**
  * Screen-space overlay drawn with WebGL (orthographic camera in CSS pixels, origin bottom-left):
@@ -14,6 +15,8 @@ import { arrowGeometry } from './keysign';
  * - with a finger: a small touch hint, a fingertip swiping sideways ("drag to look around") until
  *   the visitor first turns, then two fingertips spreading ("pinch to zoom") until they first zoom.
  *   The hints follow the pointer in use (`input.pointerType`), so a touch laptop gets the right one;
+ * - while the mouse is locked: a see-through watermark top right, "press ESC to release the
+ *   mouse" in English and Italian (the only text, asked for by the owner: `watermark.ts`);
  * - the loading screen (spinning logo + progress ring) while the world is built.
  */
 function roundedRect(w: number, h: number, r: number, hole?: number): THREE.Shape {
@@ -83,6 +86,8 @@ export class Hud implements HudHitTester {
   private readonly swipeChevrons: THREE.Object3D;
   private readonly pinchFingers: [THREE.Object3D, THREE.Object3D];
   private readonly touchMats: Array<{ m: THREE.MeshBasicMaterial; o: number }> = [];
+  private readonly escHint = new EscWatermark();
+  private escOpacity = 0;
 
   constructor(private readonly input: Input) {
     this.touch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -234,10 +239,12 @@ export class Hud implements HudHitTester {
     this.touchHint.add(plate, plateRing, this.swipeChevrons, this.swipeFinger, ...this.pinchFingers);
     this.touchHint.visible = false;
     this.scene.add(this.touchHint);
+    this.scene.add(this.escHint.mesh);
     input.hud = this;
   }
 
-  resize(w: number, h: number): void {
+  /** `pixelRatio`: the renderer's, so the watermark's text is drawn at the screen's resolution. */
+  resize(w: number, h: number, pixelRatio = 1): void {
     this.height = h;
     this.camera.left = 0;
     this.camera.right = w;
@@ -257,6 +264,10 @@ export class Hud implements HudHitTester {
       b.group.scale.setScalar(size);
     }
     this.crosshair.position.set(w / 2, h / 2, 0);
+    // Watermark in the top-right corner, on whole pixels so the text stays sharp.
+    this.escHint.draw(pixelRatio);
+    const m = w < 480 ? 12 : 16;
+    this.escHint.mesh.position.set(Math.round(w - m - this.escHint.width) + this.escHint.width / 2, Math.round(h - m - this.escHint.height) + this.escHint.height / 2, 0);
     // Mouse icon (or touch hint) to the right of the arrow pad, centred on its height.
     const padRight = baseX + (size + gap) + size / 2;
     this.mouseIcon.position.set(padRight + 24, baseY + (size + gap) / 2, 0);
@@ -281,6 +292,11 @@ export class Hud implements HudHitTester {
     return null;
   }
 
+  /** The ESC watermark is on screen (tests). */
+  get escHintShown(): boolean {
+    return this.escHint.mesh.visible;
+  }
+
   /** Centre of an arrow button in client (CSS) pixels, for tests. */
   center(intent: Intent): { x: number; y: number } {
     const b = this.buttons.find((x) => x.intent === intent)!;
@@ -298,6 +314,12 @@ export class Hud implements HudHitTester {
     this.mouseIcon.visible = !this.loading && mouse && !inp.locked && !inp.lockUnavailable;
     const needLook = inp.lastLookAt === 0;
     this.touchHint.visible = !this.loading && !mouse && (needLook || inp.lastZoomAt === 0);
+    // The watermark fades in with the lock and out when the mouse is free again.
+    const escTarget = !this.loading && inp.locked ? 0.72 : 0;
+    this.escOpacity += (escTarget - this.escOpacity) * Math.min(1, dt * 6);
+    if (escTarget === 0 && this.escOpacity < 0.01) this.escOpacity = 0;
+    this.escHint.mesh.material.opacity = this.escOpacity;
+    this.escHint.mesh.visible = this.escOpacity > 0;
     if (this.loading) {
       this.loaderLogo.rotation.y = Math.sin(t * 1.4) * 0.5;
       const p = THREE.MathUtils.clamp(this.progress, 0, 1);

@@ -12,7 +12,8 @@ in WebGL with three.js 0.186 (Vite + TypeScript, no framework). It contains 30 r
 built procedurally (10 medicale, 10 industriale, 10 design) in a minimal grey building: plaza and
 lobby, clinic wing, supermarket/warehouse wing, design gallery. The owner writes in Italian.
 
-Hard rules (details in `CLAUDE.md`): no text anywhere (DOM or world, 7-segment digits allowed), no
+Hard rules (details in `CLAUDE.md`): no text anywhere (DOM or world, 7-segment digits allowed; the
+only exception is the owner's bilingual ESC watermark in the HUD while the mouse is locked), no
 image/font/model files, greys for the environment, logos only from `src/brand/logo.ts` and always
 clickable, table-top scales on pedestals.
 
@@ -82,7 +83,8 @@ With the pointer locked the layer is hidden, the logo under the crosshair is `ai
 click calls `links.open()` (`anchor.click()` inside the trusted click, after releasing the lock).
 
 **Input model (`src/core/input.ts`, `player.ts`, `ui/hud.ts`)**: a mouse click on the canvas requests
-pointer lock (first-person look; Esc releases). One request at a time; each is judged 1 s later by
+pointer lock (first-person look; Esc releases, and while locked `ui/watermark.ts` shows the
+bilingual "press ESC" watermark top right, fading in and out with the lock). One request at a time; each is judged 1 s later by
 its outcome (a lock that lands clears any verdict), and two refusals outside the post-Esc cooldown
 fall back to drag-to-look (sandboxed frames). The first mouse move after the lock and warp spikes
 are dropped; a locked click within 400 ms of the lock (the rest of a double-click) opens nothing.

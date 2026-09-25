@@ -7,7 +7,11 @@ Published as a claude.ai Artifact (`artifact/wunder-world.html`).
 - **No text in the page.** The DOM is only `<canvas id="gl">` and `#links` (invisible `<a>` over
   logos, `aria-label` only). No labels, captions, model names or letters drawn in the world either.
   Numbers on scale displays are 7-segment geometry (`scales/segments.ts`), which is allowed.
-- **Everything is geometry or code-generated textures** (DataTexture). No image, font or model files.
+  One exception, asked for by the owner: while the mouse is locked the WebGL HUD shows a
+  see-through watermark top right, "Press ESC to release the mouse" / "Premere ESC per rilasciare
+  il mouse" (`ui/watermark.ts`, canvas-drawn with the system font). Add no other text.
+- **Everything is geometry or code-generated textures** (DataTexture; the watermark's CanvasTexture).
+  No image, font or model files.
 - **Environment in greys only** (`world/materials.ts` GREY). Colour comes from the scales' real
   finishes and the brand: red `#D90000`, medicale `#009ADE`, industriale `#FFB300`, design `#116374`.
 - **Logos** come from `brand/logo.ts` only (placeholder W monogram until the official SVG arrives;

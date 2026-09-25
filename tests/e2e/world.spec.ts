@@ -251,11 +251,13 @@ test('a click on the bare world really locks the pointer; a hidden logo link tak
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at.x, y: at.y, button: 'left', buttons: 0, clickCount: count });
   };
   await page.mouse.move(at.x, at.y);
+  expect(await page.evaluate(() => window.__wunder!.hud.escHintShown)).toBe(false);
   await click(1);
   await click(2);
   await page.waitForFunction(() => window.__wunder!.input.locked && document.pointerLockElement?.id === 'gl', null, { timeout: 30_000 });
-  // The crosshair replaces the cursor: the links step aside.
+  // The crosshair replaces the cursor: the links step aside, and the ESC watermark shows.
   await page.waitForFunction(() => document.getElementById('links')!.hidden, null, { timeout: 60_000 });
+  await page.waitForFunction(() => window.__wunder!.hud.escHintShown, null, { timeout: 60_000 });
   await page.waitForTimeout(1500); // past the moment a lock request is judged
   expect(await page.evaluate(() => window.__wunder!.input.lockUnavailable)).toBe(false);
   expect(popups).toEqual([]);
@@ -265,6 +267,7 @@ test('a click on the bare world really locks the pointer; a hidden logo link tak
   await page.waitForFunction(() => !window.__wunder!.input.locked && !document.getElementById('links')!.hidden && window.__wunder!.links.aimed === null, null, {
     timeout: 60_000,
   });
+  await page.waitForFunction(() => !window.__wunder!.hud.escHintShown, null, { timeout: 60_000 });
   await page.waitForTimeout(1600);
   await page.mouse.click(at.x, at.y);
   await page.waitForFunction(() => window.__wunder!.input.locked, null, { timeout: 30_000 });

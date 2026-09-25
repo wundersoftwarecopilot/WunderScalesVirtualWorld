@@ -90,7 +90,7 @@ async function start(renderer: THREE.WebGLRenderer): Promise<void> {
     camera.updateProjectionMatrix();
     // The player applies its zoom on top of this base field of view.
     player.setBaseFov(fovFor(camera.aspect));
-    hud.resize(w, h);
+    hud.resize(w, h, renderer.getPixelRatio());
   };
   window.addEventListener('resize', resize);
   resize();
