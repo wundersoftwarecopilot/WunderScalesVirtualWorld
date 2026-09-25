@@ -16,7 +16,8 @@ import { CLICK_LINES, ESC_LINES, Watermark } from './watermark';
  *   the visitor first turns, then two fingertips spreading ("pinch to zoom") until they first zoom.
  *   The hints follow the pointer in use (`input.pointerType`), so a touch laptop gets the right one;
  * - see-through watermarks top right in English and Italian (the only text, asked for by the
- *   owner: `watermark.ts`): "click to use the mouse as camera" while the mouse icon shows, "press ESC to release the mouse" while the mouse is locked;
+ *   owner: `watermark.ts`): "click to use the mouse as camera" while the mouse icon shows,
+ *   "press ESC to release the camera" while the mouse is locked;
  * - the loading screen (spinning logo + progress ring) while the world is built.
  */
 function roundedRect(w: number, h: number, r: number, hole?: number): THREE.Shape {

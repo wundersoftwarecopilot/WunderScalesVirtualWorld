@@ -16,7 +16,7 @@ export const CLICK_LINES: Segment[][] = [
   ['Clicca per usare il mouse come telecamera'],
 ];
 export const ESC_LINES: Segment[][] = [
-  ['Press ', { key: 'ESC' }, ' to release the mouse'],
+  ['Press ', { key: 'ESC' }, ' to release the camera'],
   ['Premere ', { key: 'ESC' }, ' per rilasciare il mouse'],
 ];
 

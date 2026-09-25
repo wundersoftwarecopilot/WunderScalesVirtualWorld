@@ -105,7 +105,7 @@ device sniffing, so touch laptops get both: mouse icon or touch hint. `watermark
 bilingual watermarks top right into CanvasTextures at the renderer's pixel ratio
 (`hud.resize(w, h, pixelRatio)`, redrawn when it changes); they cross-fade: "click to use the mouse
 as camera" while the mouse icon shows (a mouse, unlocked, lock available), "press ESC to release the
-mouse" while locked. `keysign.ts` builds the in-world key sign; its mouse turns into a phone for
+camera" while locked. `keysign.ts` builds the in-world key sign; its mouse turns into a phone for
 touch visitors.
 
 **Culling and visibility**: `world/portals.ts` sorts everything into rooms (star plan: plaza ↔ lobby
@@ -146,5 +146,5 @@ context restore, because three.js otherwise overrides `envMapIntensity` with the
   Chromium: touch laptops in Firefox/Safari; the locked mouse filter drops any single move larger
   than max(300 px, 40% of the viewport).
 - Watermark wording is the owner's: "Click to use the mouse as camera" / "Clicca per usare il mouse
-  come telecamera", "Press ESC to release the mouse" / "Premere ESC per rilasciare il mouse". Change
+  come telecamera", "Press ESC to release the camera" / "Premere ESC per rilasciare il mouse". Change
   it only in `watermark.ts` and in the `CLAUDE.md` rule.
