@@ -103,8 +103,8 @@ in CSS pixels (origin bottom-left): loader, arrow pad (its `hit()` is the input'
 crosshair and aim ring, and the hints, which follow `input.pointerType` (the pointer in use), not
 device sniffing, so touch laptops get both: mouse icon or touch hint. `watermark.ts` draws the two
 bilingual watermarks top right into CanvasTextures at the renderer's pixel ratio
-(`hud.resize(w, h, pixelRatio)`, redrawn when it changes); they cross-fade: "click to control the
-camera…" while the mouse icon shows (a mouse, unlocked, lock available), "press ESC to release the
+(`hud.resize(w, h, pixelRatio)`, redrawn when it changes); they cross-fade: "click to use the mouse
+as camera" while the mouse icon shows (a mouse, unlocked, lock available), "press ESC to release the
 mouse" while locked. `keysign.ts` builds the in-world key sign; its mouse turns into a phone for
 touch visitors.
 
@@ -145,6 +145,6 @@ context restore, because three.js otherwise overrides `envMapIntensity` with the
   a sandboxed frame without lock permission, and phone look/pinch/walk. Still unchecked outside
   Chromium: touch laptops in Firefox/Safari; the locked mouse filter drops any single move larger
   than max(300 px, 40% of the viewport).
-- Watermark wording: the ESC lines and the Italian "Clicca per usare il mouse come telecamera" are
-  the owner's; "Click to control the camera with the mouse" is adapted from their "Click to use the
-  mouse as control camera". Change it only in `watermark.ts` and in the `CLAUDE.md` rule.
+- Watermark wording is the owner's: "Click to use the mouse as camera" / "Clicca per usare il mouse
+  come telecamera", "Press ESC to release the mouse" / "Premere ESC per rilasciare il mouse". Change
+  it only in `watermark.ts` and in the `CLAUDE.md` rule.

@@ -306,7 +306,7 @@ test('in a frame without pointer-lock permission, the view still turns by draggi
   await frame.waitForFunction(() => window.__wunder!.input.lockUnavailable, null, { timeout: 30_000 });
   expect(await frame.evaluate(() => window.__wunder!.input.locked)).toBe(false);
   await frame.waitForFunction(() => !(window.__wunder!.hud as unknown as { mouseIcon: { visible: boolean } }).mouseIcon.visible, null, { timeout: 60_000 });
-  // ...and the "click to control the camera" watermark with it (a click would do nothing).
+  // ...and the "click to use the mouse as camera" watermark with it (a click would do nothing).
   await frame.waitForFunction(() => !window.__wunder!.hud.clickHintShown, null, { timeout: 60_000 });
   // Dragging turns the view.
   const yaw0 = await frame.evaluate(() => window.__wunder!.player.yaw);

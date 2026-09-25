@@ -16,8 +16,7 @@ import { CLICK_LINES, ESC_LINES, Watermark } from './watermark';
  *   the visitor first turns, then two fingertips spreading ("pinch to zoom") until they first zoom.
  *   The hints follow the pointer in use (`input.pointerType`), so a touch laptop gets the right one;
  * - see-through watermarks top right in English and Italian (the only text, asked for by the
- *   owner: `watermark.ts`): "click to control the camera with the mouse" while the mouse icon
- *   shows, "press ESC to release the mouse" while the mouse is locked;
+ *   owner: `watermark.ts`): "click to use the mouse as camera" while the mouse icon shows, "press ESC to release the mouse" while the mouse is locked;
  * - the loading screen (spinning logo + progress ring) while the world is built.
  */
 function roundedRect(w: number, h: number, r: number, hole?: number): THREE.Shape {
@@ -295,7 +294,7 @@ export class Hud implements HudHitTester {
     return null;
   }
 
-  /** The watermarks on screen (tests): "click to control the camera…", "press ESC…". */
+  /** The watermarks on screen (tests): "click to use the mouse…", "press ESC…". */
   get clickHintShown(): boolean {
     return this.clickHint.mesh.visible;
   }

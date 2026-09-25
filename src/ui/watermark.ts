@@ -12,7 +12,7 @@ import * as THREE from 'three';
 type Segment = string | { key: string };
 
 export const CLICK_LINES: Segment[][] = [
-  ['Click to control the camera with the mouse'],
+  ['Click to use the mouse as camera'],
   ['Clicca per usare il mouse come telecamera'],
 ];
 export const ESC_LINES: Segment[][] = [
