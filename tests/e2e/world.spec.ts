@@ -35,11 +35,12 @@ test('arrow keys move the visitor and walls stop them', async ({ page }) => {
   const after = await page.evaluate(() => ({ x: window.__wunder!.player.x, z: window.__wunder!.player.z }));
   expect(after.z).toBeLessThan(before.z - 0.5); // walked north towards the building
 
-  // Turning with the side arrows changes the heading.
-  const yaw0 = await page.evaluate(() => window.__wunder!.player.yaw);
+  // The side arrows step sideways (the mouse turns the view): ← moves left, the heading stays.
+  const side0 = await page.evaluate(() => ({ x: window.__wunder!.player.x, yaw: window.__wunder!.player.yaw }));
   await page.keyboard.down('ArrowLeft');
-  await page.waitForFunction((y0) => window.__wunder!.player.yaw > y0 + 0.2, yaw0, { timeout: 60_000 });
+  await page.waitForFunction((x0) => window.__wunder!.player.x < x0 - 0.3, side0.x, { timeout: 60_000 });
   await page.keyboard.up('ArrowLeft');
+  expect(await page.evaluate(() => window.__wunder!.player.yaw)).toBeCloseTo(side0.yaw, 6);
 
   // Walk into the lobby's west wall (away from the doorway): the wall must hold. z = 14.5 is a
   // stretch of bare wall between the corner bench and the planter by the glass, so the visitor
@@ -105,6 +106,71 @@ test('walking onto a floor scale starts a weighing', async ({ page }) => {
     );
     await page.keyboard.up('ArrowUp');
   }
+  expect(errors.filter((e) => !benign(e))).toEqual([]);
+});
+
+/** Pretend the browser granted pointer lock to the canvas (headless Chromium cannot lock). */
+async function fakePointerLock(page: import('@playwright/test').Page): Promise<void> {
+  await page.evaluate(() => {
+    const canvas = document.getElementById('gl')!;
+    let locked: Element | null = canvas;
+    Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => locked });
+    document.exitPointerLock = () => {
+      locked = null;
+      document.dispatchEvent(new Event('pointerlockchange'));
+    };
+    document.dispatchEvent(new Event('pointerlockchange'));
+  });
+  expect(await page.evaluate(() => window.__wunder!.input.locked)).toBe(true);
+}
+
+test('with the pointer locked the mouse turns the view, the wheel zooms, a click opens the logo in the crosshair', async ({ page, context }) => {
+  const errors: string[] = [];
+  const popups: string[] = [];
+  context.on('page', (p) => popups.push(p.url()));
+  await context.route(/wunder\.it/, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '' }));
+  await openArtifact(page, errors);
+  await page.evaluate(() => window.__wunder!.teleport('lobby'));
+  await fakePointerLock(page);
+
+  // Mouse movement turns the view: right and down.
+  const v0 = await page.evaluate(() => ({ yaw: window.__wunder!.player.yaw, pitch: window.__wunder!.player.pitch }));
+  await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementX: 100, movementY: 50 })));
+  await page.waitForFunction((y) => window.__wunder!.player.yaw < y - 0.1, v0.yaw, { timeout: 60_000 });
+  const v1 = await page.evaluate(() => ({ yaw: window.__wunder!.player.yaw, pitch: window.__wunder!.player.pitch }));
+  expect(v1.pitch).toBeLessThan(v0.pitch - 0.05);
+
+  // The wheel zooms in (narrower field of view; one event counts at most 3 notches = 1.18³),
+  // and the middle button returns to 1x.
+  const vw = page.viewportSize()!;
+  await page.mouse.move(vw.width / 2, vw.height / 2);
+  await page.mouse.wheel(0, -400);
+  await page.waitForFunction(() => window.__wunder!.player.zoom > 1.5, null, { timeout: 60_000 });
+  await page.mouse.down({ button: 'middle' });
+  await page.mouse.up({ button: 'middle' });
+  await page.waitForFunction(() => window.__wunder!.player.zoom < 1.01, null, { timeout: 60_000 });
+
+  // Aim the crosshair at the big sign on the lobby wall and click: its link opens.
+  await page.evaluate(() => {
+    const w = window.__wunder!;
+    const V = w.scene.position.constructor as typeof import('three').Vector3;
+    const signs = w.links.links.filter((l) => l.url === 'https://www.wunder.it/').map((l) => ({ l, p: l.object.getWorldPosition(new V()) }));
+    // The largest logo high on the lobby's north wall (z ≈ 0), seen from the lobby.
+    const sign = signs.filter((s) => s.p.y > 3 && Math.abs(s.p.z) < 1).sort((a, b) => b.p.y - a.p.y)[0];
+    const px = 0;
+    const pz = 6;
+    const dx = sign.p.x - px;
+    const dz = sign.p.z - pz;
+    w.player.teleport(px, pz, Math.atan2(-dx, -dz), Math.atan2(sign.p.y - 1.65, Math.hypot(dx, dz)));
+  });
+  await page.waitForFunction(() => window.__wunder!.links.aimed?.url === 'https://www.wunder.it/', null, { timeout: 60_000 });
+  // No cursor while locked: the invisible links step aside.
+  expect(await page.evaluate(() => document.getElementById('links')!.hidden)).toBe(true);
+  await page.mouse.click(vw.width / 2, vw.height / 2);
+  await expect.poll(() => popups.length, { timeout: 30_000 }).toBeGreaterThan(0);
+  expect(popups[0]).toContain('wunder.it');
+  // Following the link hands the cursor back.
+  expect(await page.evaluate(() => window.__wunder!.input.locked)).toBe(false);
   expect(errors.filter((e) => !benign(e))).toEqual([]);
 });
 

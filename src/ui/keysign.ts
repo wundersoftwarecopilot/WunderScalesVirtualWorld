@@ -4,8 +4,9 @@ import type { Input, Intent } from '../core/input';
 
 /**
  * The small "how to move" sign, entirely geometry: a slim stand with a tilted plate carrying
- * four arrow keys (inverted T). A key glows red while it is pressed. No letters.
- * Origin at the floor; faces +Z.
+ * four arrow keys (inverted T: walk and step sideways) and a mouse (look around, wheel = zoom).
+ * A key glows red while it is pressed; the mouse glows while the view turns, its wheel while
+ * zooming. No letters. Origin at the floor; faces +Z.
  */
 const RED = new THREE.Color('#d90000');
 const KEY_WHITE = new THREE.Color('#f7f7f7');
@@ -48,7 +49,7 @@ export function createKeySign(input: Input): { object: THREE.Group; update(dt: n
   plate.position.set(0, 1.0, 0.02);
   plate.rotation.x = -0.6; // tilted towards the visitor
   g.add(plate);
-  const board = new THREE.Mesh(new RoundedBoxGeometry(0.5, 0.36, 0.03, 2, 0.012), plateMat);
+  const board = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.36, 0.03, 2, 0.012), plateMat);
   board.castShadow = true;
   plate.add(board);
 
@@ -56,14 +57,15 @@ export function createKeySign(input: Input): { object: THREE.Group; update(dt: n
   const keys: Array<{ intent: Intent; mat: THREE.MeshStandardMaterial; arrow: THREE.MeshBasicMaterial; mesh: THREE.Mesh }> = [];
   const layout: Array<[Intent, number, number, number]> = [
     ['forward', 0, 0.06, 0],
-    ['left', -0.115, -0.055, Math.PI / 2],
+    ['strafeLeft', -0.115, -0.055, Math.PI / 2],
     ['back', 0, -0.055, Math.PI],
-    ['right', 0.115, -0.055, -Math.PI / 2],
+    ['strafeRight', 0.115, -0.055, -Math.PI / 2],
   ];
+  const keysX = -0.09; // the arrow cluster sits left of centre, the mouse on the right
   for (const [intent, x, y, rot] of layout) {
     const mat = new THREE.MeshStandardMaterial({ color: '#f7f7f7', roughness: 0.45, emissive: '#d90000', emissiveIntensity: 0 });
     const key = new THREE.Mesh(keyGeo, mat);
-    key.position.set(x, y, 0.03);
+    key.position.set(keysX + x, y, 0.03);
     key.castShadow = true;
     plate.add(key);
     const arrowMat = new THREE.MeshBasicMaterial({ color: '#2a2c30' });
@@ -75,11 +77,40 @@ export function createKeySign(input: Input): { object: THREE.Group; update(dt: n
     keys.push({ intent, mat, arrow: arrowMat, mesh: key });
   }
 
+  // Mouse: a rounded body lying on the plate, a groove between the buttons and a wheel.
+  const mouseMat = new THREE.MeshStandardMaterial({ color: '#f7f7f7', roughness: 0.4, emissive: '#d90000', emissiveIntensity: 0 });
+  const mouse = new THREE.Group();
+  mouse.position.set(0.19, 0.0, 0.03);
+  plate.add(mouse);
+  const body = new THREE.Mesh(new RoundedBoxGeometry(0.085, 0.13, 0.035, 4, 0.03), mouseMat);
+  body.castShadow = true;
+  mouse.add(body);
+  const grooveMat = new THREE.MeshBasicMaterial({ color: '#2a2c30' });
+  const groove = new THREE.Mesh(new THREE.PlaneGeometry(0.003, 0.05), grooveMat);
+  groove.position.set(0, 0.035, 0.0176);
+  mouse.add(groove);
+  const split = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.003), grooveMat);
+  split.position.set(0, 0.009, 0.0176);
+  mouse.add(split);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: '#2a2c30', roughness: 0.6, emissive: '#d90000', emissiveIntensity: 0 });
+  const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.01, 16), wheelMat);
+  wheel.rotation.z = Math.PI / 2;
+  wheel.position.set(0, 0.038, 0.018);
+  mouse.add(wheel);
+
   const dark = new THREE.Color('#2a2c30');
   const white = new THREE.Color('#ffffff');
   return {
     object: g,
     update(dt: number) {
+      const now = performance.now();
+      const looking = now - input.lastLookAt < 250 ? 0.8 : 0;
+      const zooming = now - input.lastZoomAt < 400 ? 1.2 : 0;
+      const k = Math.min(1, dt * 12);
+      mouseMat.emissiveIntensity += (looking - mouseMat.emissiveIntensity) * k;
+      mouseMat.color.lerpColors(KEY_WHITE, RED, Math.min(1, mouseMat.emissiveIntensity));
+      wheelMat.emissiveIntensity += (zooming - wheelMat.emissiveIntensity) * k;
+      wheel.rotation.x += zooming ? dt * 8 : 0;
       for (const k of keys) {
         const on = input.isHeld(k.intent);
         const target = on ? 1 : 0;

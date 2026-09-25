@@ -6,13 +6,21 @@ export const EYE_HEIGHT = 1.65;
 export const BODY_RADIUS = 0.28;
 const WALK = 2.1;
 const RUN = 4.2;
-const TURN = 1.9; // rad/s with the arrow keys
-const LOOK_SENS = 0.0042; // rad per dragged pixel
-const PITCH_LIMIT = THREE.MathUtils.degToRad(70);
+const PITCH_LIMIT = THREE.MathUtils.degToRad(85);
+/** Zoom range: 1× is the normal view, 4× a close look at a display or a logo. */
+export const MIN_ZOOM = 1;
+export const MAX_ZOOM = 4;
+
+/** Vertical field of view at a zoom factor: the view's tangent shrinks by the zoom (like a lens). */
+export function zoomedFov(baseFovDeg: number, zoom: number): number {
+  const r = THREE.MathUtils.DEG2RAD;
+  return (2 * Math.atan(Math.tan((baseFovDeg * r) / 2) / zoom)) / r;
+}
 
 /**
- * First-person visitor: position on the floor plane, yaw/pitch, smooth acceleration, and an
- * extra floor height when standing on a scale platform.
+ * First-person visitor: position on the floor plane, yaw/pitch from the mouse (or a drag), a
+ * smooth lens zoom, walking with smooth acceleration (the arrows only walk and step sideways),
+ * and an extra floor height when standing on a scale platform.
  */
 export class Player {
   x: number;
@@ -27,6 +35,12 @@ export class Player {
   private bobPhase = 0;
   private bobAmp = 0;
   reducedMotion = false;
+  /** Current and target zoom (1 = normal view). */
+  zoom = 1;
+  zoomTarget = 1;
+  /** Field of view at 1× for the current screen shape (set by the page on resize). */
+  private baseFov = 64;
+  private appliedFov = 0;
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
@@ -37,6 +51,11 @@ export class Player {
     this.x = start.x;
     this.z = start.z;
     this.yaw = start.yaw;
+  }
+
+  setBaseFov(fov: number): void {
+    this.baseFov = fov;
+    this.applyFov();
   }
 
   teleport(x: number, z: number, yaw: number, pitch = 0): void {
@@ -59,12 +78,17 @@ export class Player {
 
   update(dt: number): void {
     const inp = this.input;
-    const look = inp.takeLook();
-    this.yaw -= look.dx * LOOK_SENS;
-    this.pitch = THREE.MathUtils.clamp(this.pitch - look.dy * LOOK_SENS, -PITCH_LIMIT, PITCH_LIMIT);
+    // Zoom: wheel / pinch multiply the target; the lens eases towards it.
+    const z = inp.takeZoom();
+    if (z.reset) this.zoomTarget = 1;
+    this.zoomTarget = THREE.MathUtils.clamp(this.zoomTarget * z.factor, MIN_ZOOM, MAX_ZOOM);
+    this.zoom += (this.zoomTarget - this.zoom) * (1 - Math.exp(-dt * 12));
+    if (Math.abs(this.zoomTarget - this.zoom) < 1e-3) this.zoom = this.zoomTarget;
 
-    if (inp.isHeld('left')) this.yaw += TURN * dt;
-    if (inp.isHeld('right')) this.yaw -= TURN * dt;
+    // Look: slower when zoomed in, so the same mouse move covers the same part of the image.
+    const look = inp.takeLook();
+    this.yaw += look.yaw / this.zoom;
+    this.pitch = THREE.MathUtils.clamp(this.pitch + look.pitch / this.zoom, -PITCH_LIMIT, PITCH_LIMIT);
 
     let mf = 0;
     let ms = 0;
@@ -111,5 +135,14 @@ export class Player {
     const bob = Math.sin(this.bobPhase * 2) * 0.018 * this.bobAmp;
     this.camera.position.set(this.x, EYE_HEIGHT + this.floor + bob, this.z);
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+    this.applyFov();
+  }
+
+  private applyFov(): void {
+    const fov = zoomedFov(this.baseFov, this.zoom);
+    if (Math.abs(fov - this.appliedFov) < 1e-4) return;
+    this.appliedFov = fov;
+    this.camera.fov = fov;
+    this.camera.updateProjectionMatrix();
   }
 }

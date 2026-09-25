@@ -42,7 +42,7 @@ const importmap = {
 const html = `<title>Wunder Virtual World</title>
 <meta name="description" content="Showroom Wunder Sa.Bi. in WebGL: cammina tra ambulatorio, magazzino e galleria e scopri 30 bilance medicali, industriali e design.">
 <style>${css}</style>
-<canvas id="gl" tabindex="0" aria-label="Showroom Wunder in 3D: frecce per camminare, trascina per guardare"></canvas>
+<canvas id="gl" tabindex="0" aria-label="Showroom Wunder in 3D: clic per guardare col mouse (Esc per liberarlo), rotella per lo zoom, frecce per camminare"></canvas>
 <div id="links"></div>
 <script type="importmap">${JSON.stringify(importmap)}</script>
 <script type="module">${app}</script>

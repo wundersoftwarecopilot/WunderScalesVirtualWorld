@@ -5,9 +5,12 @@ import { arrowGeometry } from './keysign';
 
 /**
  * Screen-space overlay drawn with WebGL (orthographic camera in CSS pixels, origin bottom-left):
- * - four thin arrow buttons: touch controls on phones; on desktop both a movement hint and the
- *   mouse-only way to walk. They dim (never vanish, never stop working) a few seconds after the
- *   visitor walks with the keyboard, and stay bright while the pointer uses them;
+ * - four thin arrow buttons (walk / step sideways): touch controls on phones; on desktop both a
+ *   movement hint and the mouse-only way to walk. They dim (never vanish, never stop working) a
+ *   few seconds after the visitor walks with the keyboard, and stay bright while the pointer
+ *   uses them;
+ * - desktop: a small mouse icon whose left button pulses ("click to look around") until the
+ *   pointer is locked; then a crosshair in the middle, ringed in white over a logo (the logo glows);
  * - the loading screen (spinning logo + progress ring) while the world is built.
  */
 function roundedRect(w: number, h: number, r: number, hole?: number): THREE.Shape {
@@ -65,6 +68,13 @@ export class Hud implements HudHitTester {
   private readonly touch: boolean;
   loading = true;
   progress = 0;
+  /** Set by the page each frame: a logo is under the crosshair. */
+  aimed = false;
+  private readonly crosshair = new THREE.Group();
+  private readonly aimRing: THREE.Mesh;
+  private readonly mouseIcon = new THREE.Group();
+  private readonly mouseButton: THREE.MeshBasicMaterial;
+  private readonly mouseMats: THREE.MeshBasicMaterial[] = [];
 
   constructor(private readonly input: Input) {
     this.touch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -72,9 +82,9 @@ export class Hud implements HudHitTester {
 
     const layout: Array<[Intent, number, number, number]> = [
       ['forward', 0, 1, 0],
-      ['left', -1, 0, Math.PI / 2],
+      ['strafeLeft', -1, 0, Math.PI / 2],
       ['back', 0, 0, Math.PI],
-      ['right', 1, 0, -Math.PI / 2],
+      ['strafeRight', 1, 0, -Math.PI / 2],
     ];
     for (const [intent, gx, gy, rot] of layout) {
       const group = new THREE.Group();
@@ -123,6 +133,54 @@ export class Hud implements HudHitTester {
     bg.renderOrder = -1;
     bg.name = 'loader-bg';
     this.loader.add(bg);
+    // Crosshair (pixels): a white dot with a dark rim, and a red ring shown over a logo.
+    const hudMat = (color: string, opacity = 1) =>
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, toneMapped: false });
+    const rim = new THREE.Mesh(new THREE.CircleGeometry(4, 20), hudMat('#1f2226', 0.55));
+    const dot = new THREE.Mesh(new THREE.CircleGeometry(2.4, 20), hudMat('#ffffff'));
+    // Over a logo: a white ring with a dark rim (the logos are red: a red ring would vanish).
+    this.aimRing = new THREE.Mesh(new THREE.RingGeometry(8, 12.5, 40), hudMat('#1f2226', 0.55));
+    const aimInner = new THREE.Mesh(new THREE.RingGeometry(9, 11.5, 40), hudMat('#ffffff', 0.95));
+    this.aimRing.add(aimInner);
+    rim.renderOrder = 10;
+    dot.renderOrder = 11;
+    this.aimRing.renderOrder = 12;
+    aimInner.renderOrder = 13;
+    this.crosshair.add(rim, dot, this.aimRing);
+    this.crosshair.visible = false;
+    this.scene.add(this.crosshair);
+
+    // Mouse icon (pixels, centred): outline, button divider, wheel, and a pulsing left button.
+    const W = 22;
+    const H = 34;
+    const outlineMat = hudMat('#ffffff', 0.9);
+    const bodyMat = hudMat('#1f2226', 0.28);
+    this.mouseButton = hudMat('#d90000', 0);
+    const lineMat = hudMat('#ffffff', 0.9);
+    this.mouseMats.push(outlineMat, bodyMat, lineMat);
+    const body = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(W, H, 10)), bodyMat);
+    const outline = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(W, H, 10, 1.6)), outlineMat);
+    // Left button: the top-left quarter of the body.
+    const btn = new THREE.Shape();
+    btn.moveTo(-W / 2 + 1.6, 0);
+    btn.lineTo(-W / 2 + 1.6, H / 2 - 10);
+    btn.quadraticCurveTo(-W / 2 + 1.6, H / 2 - 1.6, -W / 2 + 10, H / 2 - 1.6);
+    btn.lineTo(-0.8, H / 2 - 1.6);
+    btn.lineTo(-0.8, 0);
+    btn.closePath();
+    const button = new THREE.Mesh(new THREE.ShapeGeometry(btn), this.mouseButton);
+    const divider = new THREE.Mesh(new THREE.PlaneGeometry(1.4, H / 2), lineMat);
+    divider.position.y = H / 4;
+    const split = new THREE.Mesh(new THREE.PlaneGeometry(W - 3, 1.4), lineMat);
+    const wheel = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(3.2, 7, 1.6)), lineMat);
+    wheel.position.y = H / 4 - 1;
+    body.renderOrder = 20;
+    button.renderOrder = 21;
+    outline.renderOrder = 22;
+    divider.renderOrder = split.renderOrder = wheel.renderOrder = 23;
+    this.mouseIcon.add(body, button, outline, divider, split, wheel);
+    this.mouseIcon.visible = false;
+    this.scene.add(this.mouseIcon);
     input.hud = this;
   }
 
@@ -145,6 +203,9 @@ export class Hud implements HudHitTester {
       b.group.position.set(b.cx, b.cy, 0);
       b.group.scale.setScalar(size);
     }
+    this.crosshair.position.set(w / 2, h / 2, 0);
+    // Mouse icon to the right of the arrow pad, centred on its height.
+    this.mouseIcon.position.set(baseX + (size + gap) + size / 2 + 24, baseY + (size + gap) / 2, 0);
     const s = Math.min(w, h) * 0.22;
     this.loader.position.set(w / 2, h / 2, 0);
     this.loaderLogo.scale.setScalar(s);
@@ -174,6 +235,10 @@ export class Hud implements HudHitTester {
   update(dt: number, t: number): void {
     this.loader.visible = this.loading;
     this.pad.visible = !this.loading;
+    const desktop = !(this.touch || this.input.usedTouch);
+    this.crosshair.visible = !this.loading && this.input.locked;
+    this.aimRing.visible = this.aimed;
+    this.mouseIcon.visible = !this.loading && desktop && !this.input.locked && !this.input.lockUnavailable;
     if (this.loading) {
       this.loaderLogo.rotation.y = Math.sin(t * 1.4) * 0.5;
       const p = THREE.MathUtils.clamp(this.progress, 0, 1);
@@ -200,5 +265,10 @@ export class Hud implements HudHitTester {
       b.arrow.opacity = 0.95 * this.opacity;
     }
     this.pad.visible = true;
+    if (this.mouseIcon.visible) {
+      // "Click here": the left button pulses softly.
+      this.mouseButton.opacity = (0.35 + 0.35 * Math.sin(t * 4)) * this.opacity + 0.1;
+      for (const m of this.mouseMats) m.opacity = (m === this.mouseMats[1] ? 0.28 : 0.9) * Math.max(this.opacity, 0.6);
+    }
   }
 }

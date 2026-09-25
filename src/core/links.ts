@@ -4,6 +4,9 @@ import * as THREE from 'three';
  * Clickable logos. Artifact viewers block window.open for most visitors, so every logo that is
  * on screen gets a real, transparent <a href> placed exactly over its projected bounds. The
  * visitor clicks or taps a normal link; the WebGL logo lights up on hover.
+ *
+ * With the pointer locked (first-person mouse look) there is no cursor: the logo under the
+ * crosshair in the middle of the screen is "aimed" (it lights up) and open() follows its link.
  */
 export interface LinkTarget {
   object: THREE.Object3D;
@@ -39,6 +42,11 @@ export class LinkLayer {
   private readonly projScreen = new THREE.Matrix4();
   /** World-space boxes that can hide a logo (walls, tall shelving). Filled by the world builder. */
   occluders: THREE.Box3[] = [];
+  /** The logo under the crosshair while the pointer is locked. */
+  aimed: LinkTarget | null = null;
+  private readonly aimRay = new THREE.Ray();
+  private readonly aimHit = new THREE.Vector3();
+  private readonly aimDir = new THREE.Vector3();
 
   constructor(private readonly layer: HTMLElement) {}
 
@@ -74,11 +82,7 @@ export class LinkLayer {
     a.draggable = false;
     a.setAttribute('aria-label', t.label);
     a.hidden = true;
-    const hover = (on: boolean) => {
-      if (t.hovered === on) return;
-      t.hovered = on;
-      t.onHover?.(on);
-    };
+    const hover = (on: boolean) => this.setHover(t, on);
     a.addEventListener('pointerenter', () => hover(true));
     a.addEventListener('pointerleave', () => hover(false));
     a.addEventListener('focus', () => hover(true));
@@ -88,7 +92,18 @@ export class LinkLayer {
     return a;
   }
 
-  update(camera: THREE.PerspectiveCamera, width: number, height: number): void {
+  /** Follow a link from script, inside the click that asked for it (keeps the user activation). */
+  open(t: LinkTarget): void {
+    this.anchorFor(t).click();
+  }
+
+  private setHover(t: LinkTarget, on: boolean): void {
+    if (t.hovered === on) return;
+    t.hovered = on;
+    t.onHover?.(on);
+  }
+
+  update(camera: THREE.PerspectiveCamera, width: number, height: number, locked = false): void {
     camera.updateMatrixWorld();
     this.projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.projScreen);
@@ -102,6 +117,11 @@ export class LinkLayer {
       if (t.visible) t.occluded = this.isOccluded(t, camPos);
     }
     this.occlusionCursor = (this.occlusionCursor + budget) % Math.max(1, this.links.length);
+
+    // Crosshair ray: from the eye straight ahead.
+    this.aimRay.set(camPos, camera.getWorldDirection(this.aimDir));
+    let best: LinkTarget | null = null;
+    let bestDist = Infinity;
 
     for (const t of this.links) {
       const center = this.tmpV.copy(t.sphere.center).applyMatrix4(t.object.matrixWorld);
@@ -142,15 +162,28 @@ export class LinkLayer {
             p.z = z;
           }
           show = true;
+          if (locked && this.aimRay.intersectSphere(this.sph, this.aimHit)) {
+            const d = this.aimHit.distanceTo(camPos);
+            if (d < bestDist) {
+              bestDist = d;
+              best = t;
+            }
+          }
         }
       }
       t.visible = inView;
       if (t.anchor && t.anchor.hidden === show) t.anchor.hidden = !show;
-      if (!show && t.hovered) {
-        t.hovered = false;
-        t.onHover?.(false);
-      }
+      if (!show && t.hovered) this.setHover(t, false);
     }
+
+    // Locked: no cursor, so the invisible links step aside and the aimed logo takes the hover.
+    const aimed = locked ? best : null;
+    if (aimed !== this.aimed) {
+      if (this.aimed) this.setHover(this.aimed, false);
+      this.aimed = aimed;
+    }
+    if (locked) for (const t of this.links) this.setHover(t, t === aimed);
+    if (this.layer.hidden !== locked) this.layer.hidden = locked;
   }
 
   private isOccluded(t: LinkTarget, camPos: THREE.Vector3): boolean {

@@ -87,8 +87,9 @@ async function start(renderer: THREE.WebGLRenderer): Promise<void> {
     renderer.setPixelRatio(pixelRatioFor(quality));
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    camera.fov = fovFor(camera.aspect);
     camera.updateProjectionMatrix();
+    // The player applies its zoom on top of this base field of view.
+    player.setBaseFov(fovFor(camera.aspect));
     hud.resize(w, h);
   };
   window.addEventListener('resize', resize);
@@ -152,6 +153,16 @@ async function start(renderer: THREE.WebGLRenderer): Promise<void> {
   if (view) teleport(view);
   player.update(0);
 
+  // Mouse look: a click while the pointer is locked follows the logo under the crosshair. The
+  // lock is released first, so the visitor gets the cursor back (and a blocked popup can still
+  // be opened by clicking the logo itself).
+  input.onLockedClick = () => {
+    const t = links.aimed;
+    if (!t) return;
+    input.unlock();
+    links.open(t);
+  };
+
   hud.progress = 1;
   hud.loading = false;
   ready = true;
@@ -193,7 +204,8 @@ async function start(renderer: THREE.WebGLRenderer): Promise<void> {
     renderer.render(scene, camera);
     renderer.clearDepth();
     renderer.render(hud.scene, hud.camera);
-    links.update(camera, window.innerWidth, window.innerHeight);
+    links.update(camera, window.innerWidth, window.innerHeight, input.locked);
+    hud.aimed = links.aimed !== null;
     frames++;
     requestAnimationFrame(loop);
   };
