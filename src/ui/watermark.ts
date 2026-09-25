@@ -17,7 +17,7 @@ export const CLICK_LINES: Segment[][] = [
 ];
 export const ESC_LINES: Segment[][] = [
   ['Press ', { key: 'ESC' }, ' to release the camera'],
-  ['Premere ', { key: 'ESC' }, ' per rilasciare il mouse'],
+  ['Premere ', { key: 'ESC' }, ' per rilasciare la telecamera'],
 ];
 
 /** CSS pixels. */

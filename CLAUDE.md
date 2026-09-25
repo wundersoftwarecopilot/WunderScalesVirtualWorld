@@ -10,7 +10,7 @@ Published as a claude.ai Artifact (`artifact/wunder-world.html`).
   One exception, asked for by the owner: see-through watermarks top right in the WebGL HUD
   (`ui/watermark.ts`, canvas-drawn with the system font), English above, Italian below: before the
   click "Click to use the mouse as camera" / "Clicca per usare il mouse come telecamera",
-  while locked "Press ESC to release the camera" / "Premere ESC per rilasciare il mouse".
+  while locked "Press ESC to release the camera" / "Premere ESC per rilasciare la telecamera".
   Add no other text.
 - **Everything is geometry or code-generated textures** (DataTexture; the watermarks' CanvasTexture).
   No image, font or model files.

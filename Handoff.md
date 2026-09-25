@@ -146,5 +146,5 @@ context restore, because three.js otherwise overrides `envMapIntensity` with the
   Chromium: touch laptops in Firefox/Safari; the locked mouse filter drops any single move larger
   than max(300 px, 40% of the viewport).
 - Watermark wording is the owner's: "Click to use the mouse as camera" / "Clicca per usare il mouse
-  come telecamera", "Press ESC to release the camera" / "Premere ESC per rilasciare il mouse". Change
-  it only in `watermark.ts` and in the `CLAUDE.md` rule.
+  come telecamera", "Press ESC to release the camera" / "Premere ESC per rilasciare la telecamera".
+  Change it only in `watermark.ts` and in the `CLAUDE.md` rule.
