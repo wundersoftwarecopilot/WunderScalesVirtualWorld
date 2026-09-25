@@ -145,7 +145,6 @@ context restore, because three.js otherwise overrides `envMapIntensity` with the
   a sandboxed frame without lock permission, and phone look/pinch/walk. Still unchecked outside
   Chromium: touch laptops in Firefox/Safari; the locked mouse filter drops any single move larger
   than max(300 px, 40% of the viewport).
-- Watermark wording: the ESC lines are the owner's; "Click to control the camera with the mouse" is
-  adapted from their "Click to use the mouse as control camera", and the Italian mirrors "Premere
-  ESC…" with "Cliccare…". The owner has not confirmed that wording yet. Change it only in
-  `watermark.ts` and in the `CLAUDE.md` rule.
+- Watermark wording: the ESC lines and the Italian "Clicca per usare il mouse come telecamera" are
+  the owner's; "Click to control the camera with the mouse" is adapted from their "Click to use the
+  mouse as control camera". Change it only in `watermark.ts` and in the `CLAUDE.md` rule.

@@ -13,7 +13,7 @@ type Segment = string | { key: string };
 
 export const CLICK_LINES: Segment[][] = [
   ['Click to control the camera with the mouse'],
-  ['Cliccare per controllare la telecamera con il mouse'],
+  ['Clicca per usare il mouse come telecamera'],
 ];
 export const ESC_LINES: Segment[][] = [
   ['Press ', { key: 'ESC' }, ' to release the mouse'],

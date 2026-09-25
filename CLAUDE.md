@@ -9,8 +9,8 @@ Published as a claude.ai Artifact (`artifact/wunder-world.html`).
   Numbers on scale displays are 7-segment geometry (`scales/segments.ts`), which is allowed.
   One exception, asked for by the owner: see-through watermarks top right in the WebGL HUD
   (`ui/watermark.ts`, canvas-drawn with the system font), English above, Italian below: before the
-  click "Click to control the camera with the mouse" / "Cliccare per controllare la telecamera con
-  il mouse", while locked "Press ESC to release the mouse" / "Premere ESC per rilasciare il mouse".
+  click "Click to control the camera with the mouse" / "Clicca per usare il mouse come telecamera",
+  while locked "Press ESC to release the mouse" / "Premere ESC per rilasciare il mouse".
   Add no other text.
 - **Everything is geometry or code-generated textures** (DataTexture; the watermarks' CanvasTexture).
   No image, font or model files.
