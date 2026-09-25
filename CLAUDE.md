@@ -37,8 +37,20 @@ Published as a claude.ai Artifact (`artifact/wunder-world.html`).
   per material), `ctx.instanced` for repeats, `ctx.addSolid/addCollider` for collisions,
   `ctx.addOccluder` for tall things, `ctx.logo/painting` for clickable brand pieces.
 
+## Rendering budget and culling
+- Target: < 400 draw calls and < 1.2M triangles in any view (`window.__wunder.stats()`).
+- `world/portals.ts` culls whole rooms: the plan is a star (plaza ↔ lobby through the glass
+  front, lobby ↔ each wing through its doorway). Everything is sorted into rooms by its bounds
+  once after `ctx.bake()`; a unit in another room is drawn only if it reaches into the wedge seen
+  through the doorway chain. Hidden meshes move to layer 1 (never `.visible`, which zones use for
+  their own finer checks). Keep new rooms/openings in `layout.ts` (OPENINGS with `top`,
+  FACADE_GLASS) so the culler and the shell agree.
+- A logo (`brand/logo.ts`) is ONE mesh with vertex colours: one draw call. A painting is its
+  canvas face + logo; `ctx.painting()` merges the frame into the static batch.
+
 ## Commands
 - `npx vite --port <port> --strictPort` dev server (index.html world, lab.html single scale)
 - `node scripts/shots.mjs --port <port> lab <id> --angles 0,35,160` model screenshots → `shots/`
-- `node scripts/shots.mjs --port <port> world lobby medicale …` world viewpoints (layout.ts VIEWPOINTS)
+- `node scripts/shots.mjs --port <port> world lobby medicale …` world viewpoints (layout.ts VIEWPOINTS),
+  prints render stats per view; `… sweep --step 4` walks the whole world and reports the worst views
 - `npm run typecheck`, `npm test` (vitest), `npm run build` (→ artifact), `npm run e2e` (Playwright)

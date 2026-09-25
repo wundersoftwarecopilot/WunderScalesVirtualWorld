@@ -4,7 +4,12 @@ export interface Collider extends Rect {
   /** Disabled colliders are skipped (used by the sliding doors). */
   enabled?: boolean;
   tag?: string;
+  /** Internal: stamp of the last near() query that collected it (dedup without a Set). */
+  q?: number;
 }
+
+/** Numeric grid-cell key (cells stay within a few hundred of the origin). */
+const cellKey = (gx: number, gz: number) => gx * 100003 + gz;
 
 /**
  * Static 2D collision world: circles (the visitor) against axis-aligned rectangles, with a
@@ -12,8 +17,11 @@ export interface Collider extends Rect {
  */
 export class CollisionWorld {
   private readonly cell: number;
-  private readonly grid = new Map<string, Collider[]>();
+  private readonly grid = new Map<number, Collider[]>();
   private readonly all: Collider[] = [];
+  // near() runs several times per movement sub-step: it reuses one result array.
+  private readonly found: Collider[] = [];
+  private stamp = 0;
 
   constructor(cell = 2) {
     this.cell = cell;
@@ -29,7 +37,7 @@ export class CollisionWorld {
     const { cell } = this;
     for (let gx = Math.floor(c.minX / cell); gx <= Math.floor(c.maxX / cell); gx++) {
       for (let gz = Math.floor(c.minZ / cell); gz <= Math.floor(c.maxZ / cell); gz++) {
-        const key = gx + ',' + gz;
+        const key = cellKey(gx, gz);
         let list = this.grid.get(key);
         if (!list) this.grid.set(key, (list = []));
         list.push(c);
@@ -38,17 +46,27 @@ export class CollisionWorld {
     return c;
   }
 
-  /** Colliders whose grid cells touch the circle's bounding square. */
-  near(x: number, z: number, radius: number): Collider[] {
+  /**
+   * Colliders whose grid cells touch the circle's bounding square. The returned array is reused
+   * by the next call: iterate it before querying again.
+   */
+  near(x: number, z: number, radius: number): readonly Collider[] {
     const { cell } = this;
-    const out = new Set<Collider>();
+    const out = this.found;
+    out.length = 0;
+    const stamp = ++this.stamp;
     for (let gx = Math.floor((x - radius) / cell); gx <= Math.floor((x + radius) / cell); gx++) {
       for (let gz = Math.floor((z - radius) / cell); gz <= Math.floor((z + radius) / cell); gz++) {
-        const list = this.grid.get(gx + ',' + gz);
-        if (list) for (const c of list) if (c.enabled !== false) out.add(c);
+        const list = this.grid.get(cellKey(gx, gz));
+        if (!list) continue;
+        for (const c of list) {
+          if (c.enabled === false || c.q === stamp) continue;
+          c.q = stamp;
+          out.push(c);
+        }
       }
     }
-    return [...out];
+    return out;
   }
 
   /** True when a circle at (x,z) overlaps any enabled collider. */

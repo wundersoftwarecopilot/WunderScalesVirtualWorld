@@ -1,4 +1,11 @@
-import { stubScale } from '../stub';
+import { SPECS } from '../specs';
+import type { ScaleDef } from '../types';
+import { build960 } from './_body960';
 
-// Placeholder until the real model is built.
-export default stubScale('960-glass');
+/** 960 Glass: chrome body with a clear tempered-glass plate on polished stand-offs. */
+const def: ScaleDef = {
+  spec: SPECS['960-glass'],
+  build: () => build960('chrome', 'glass'),
+};
+
+export default def;

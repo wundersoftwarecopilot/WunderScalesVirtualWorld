@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BRAND } from './colors';
 import type { Division } from './urls';
 
@@ -65,56 +66,125 @@ function tagShape(): THREE.Shape {
   return s;
 }
 
-let cachedW: THREE.ShapeGeometry | null = null;
+/**
+ * Each logo is ONE mesh (one draw call): disc, W and division tag are merged into a single
+ * geometry with vertex colours. The emissive term is multiplied by the vertex colour (shader
+ * patch below), so one material per logo still gives a red disc, white W and coloured tag.
+ *
+ * Finish: the brand colours are never recoloured by the light. A lit PBR surface (any
+ * roughness) picked up Fresnel and environment reflections and, lit by sun + sky, went past the
+ * tone mapper's knee: signs read #F02828 face-on and salmon at grazing angles. So the logo is a
+ * Lambert surface (no specular, no reflections) whose colour comes mostly from emission, with a
+ * little diffuse light for shape: the frame shows about #D90000 wherever it hangs, in sun or shade.
+ */
+/** Share of the vertex colour that is lit (linear): gives solid signs their shading. */
+const DIFFUSE = 0.3;
+/** Share that is emitted: the part that holds the colour whatever the light. */
+const EMISSIVE_REST = 0.6;
+const EMISSIVE_HOVER = 1.1;
+
+function tintEmissive(shader: THREE.WebGLProgramParametersWithUniforms): void {
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <emissivemap_fragment>',
+    '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vColor.rgb;',
+  );
+}
+
+function logoMaterial(): THREE.MeshLambertMaterial {
+  const m = new THREE.MeshLambertMaterial({
+    color: new THREE.Color(DIFFUSE, DIFFUSE, DIFFUSE),
+    vertexColors: true,
+    emissive: '#ffffff',
+    emissiveIntensity: EMISSIVE_REST,
+  });
+  m.name = 'wunder-logo';
+  m.onBeforeCompile = tintEmissive;
+  m.customProgramCacheKey = () => 'wunder-logo';
+  return m;
+}
+
+/** Non-indexed copy with a constant vertex colour and only position/normal/uv/color. */
+function painted(geo: THREE.BufferGeometry, color: string, m?: THREE.Matrix4): THREE.BufferGeometry {
+  let g = geo.index ? geo.toNonIndexed() : geo.clone();
+  for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'uv') g.deleteAttribute(name);
+  if (!g.getAttribute('normal')) g.computeVertexNormals();
+  if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
+  if (m) g = g.applyMatrix4(m);
+  const c = new THREE.Color(color);
+  const n = g.getAttribute('position').count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    col[i * 3] = c.r;
+    col[i * 3 + 1] = c.g;
+    col[i * 3 + 2] = c.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
+}
+
+let cachedWFlat: THREE.ShapeGeometry | null = null;
 let cachedWSolid: THREE.ExtrudeGeometry | null = null;
 let cachedTag: THREE.ShapeGeometry | null = null;
-let cachedDisc: THREE.CircleGeometry | null = null;
+/** Tag as a unit-depth solid (z 0..1), scaled to the sign's depth. */
+let cachedTagSolid: THREE.ExtrudeGeometry | null = null;
+/** Flat logos in unit form (disc radius 1, W at z = 1, tag at z = 0.6): scaled per logo. */
+const flatCache = new Map<string, THREE.BufferGeometry>();
+
+function flatUnit(tagColor: string | undefined): THREE.BufferGeometry {
+  const key = tagColor ?? 'none';
+  const hit = flatCache.get(key);
+  if (hit) return hit;
+  cachedWFlat ??= new THREE.ShapeGeometry(wShapes());
+  const parts = [painted(new THREE.CircleGeometry(1, 48), BRAND.red), painted(cachedWFlat, BRAND.white, new THREE.Matrix4().makeTranslation(0, 0, 1))];
+  if (tagColor) {
+    cachedTag ??= new THREE.ShapeGeometry(tagShape());
+    parts.push(painted(cachedTag, tagColor, new THREE.Matrix4().makeTranslation(0, 0, 0.6)));
+  }
+  const g = mergeGeometries(parts, false)!;
+  for (const p of parts) p.dispose();
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  flatCache.set(key, g);
+  return g;
+}
 
 export function createLogo(opts: LogoOptions): THREE.Group {
   const R = opts.diameter / 2;
   const style = opts.style ?? 'flat';
   const g = new THREE.Group();
   g.name = 'wunder-logo';
+  const mat = logoMaterial();
+  const tagColor = opts.division ? DIVISION_COLOR[opts.division] : undefined;
 
-  const red = new THREE.MeshStandardMaterial({ color: BRAND.red, roughness: 0.35, metalness: 0.0, emissive: BRAND.red, emissiveIntensity: 0.06 });
-  const white = new THREE.MeshStandardMaterial({ color: BRAND.white, roughness: 0.4, emissive: '#ffffff', emissiveIntensity: 0.05 });
-
+  let mesh: THREE.Mesh;
   if (style === 'solid') {
     const depth = opts.depth ?? opts.diameter * 0.08;
-    const disc = new THREE.Mesh(new THREE.CylinderGeometry(R, R, depth, 64), red);
-    disc.rotation.x = Math.PI / 2;
-    disc.position.z = -depth / 2;
-    disc.castShadow = true;
-    g.add(disc);
     cachedWSolid ??= new THREE.ExtrudeGeometry(wShapes(), { depth: 0.12, bevelEnabled: false });
-    const wMesh = new THREE.Mesh(cachedWSolid, white);
-    wMesh.scale.set(R, R, R * 0.5);
-    g.add(wMesh);
+    const discM = new THREE.Matrix4().makeTranslation(0, 0, -depth / 2).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+    const parts = [
+      painted(new THREE.CylinderGeometry(R, R, depth, 64), BRAND.red, discM),
+      painted(cachedWSolid, BRAND.white, new THREE.Matrix4().makeScale(R, R, R * 0.5)),
+    ];
+    if (tagColor) {
+      // A solid bar as deep as the disc, mounted on the wall like it (z −depth..0).
+      cachedTagSolid ??= new THREE.ExtrudeGeometry(tagShape(), { depth: 1, bevelEnabled: false });
+      parts.push(painted(cachedTagSolid, tagColor, new THREE.Matrix4().makeTranslation(0, 0, -depth).multiply(new THREE.Matrix4().makeScale(R, R, depth))));
+    }
+    const geo = mergeGeometries(parts, false)!;
+    for (const p of parts) p.dispose();
+    mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true;
   } else {
-    cachedDisc ??= new THREE.CircleGeometry(1, 48);
-    const disc = new THREE.Mesh(cachedDisc, red);
-    disc.scale.setScalar(R);
-    g.add(disc);
-    cachedW ??= new THREE.ShapeGeometry(wShapes());
-    const wMesh = new THREE.Mesh(cachedW, white);
-    wMesh.scale.setScalar(R);
-    wMesh.position.z = Math.max(0.0008, R * 0.01);
-    g.add(wMesh);
+    mesh = new THREE.Mesh(flatUnit(tagColor), mat);
+    // x/y scale the artwork; z sets the stacking gaps (W 1 mm-ish above the disc, tag below it).
+    mesh.scale.set(R, R, Math.max(0.0008, R * 0.01));
   }
-
-  const tagColor = opts.division ? DIVISION_COLOR[opts.division] : undefined;
-  if (tagColor) {
-    cachedTag ??= new THREE.ShapeGeometry(tagShape());
-    const tag = new THREE.Mesh(cachedTag, new THREE.MeshStandardMaterial({ color: tagColor, roughness: 0.45 }));
-    tag.scale.setScalar(R);
-    tag.position.z = style === 'solid' ? 0.001 : 0.0005;
-    g.add(tag);
-  }
+  mesh.name = 'wunder-logo-mesh';
+  g.add(mesh);
 
   g.userData.logo = { division: opts.division ?? 'corporate' };
   g.userData.setHover = (on: boolean) => {
-    red.emissiveIntensity = on ? 0.85 : 0.06;
-    white.emissiveIntensity = on ? 0.6 : 0.05;
+    mat.emissiveIntensity = on ? EMISSIVE_HOVER : EMISSIVE_REST;
   };
   return g;
 }

@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { applyEnvironment, createRenderer, detectQuality } from './core/renderer';
+import { applyEnvironment, bindEnvironment, createRenderer, detectQuality } from './core/renderer';
 import { loadCatalog } from './scales/catalog';
 import { mergeModel } from './world/batch';
-import { createPedestal } from './world/pedestal';
+import { createPedestal, pedestalSize } from './world/pedestal';
 
 /**
  * Scale lab: renders ONE scale on a neutral stage for modelling and screenshots.
@@ -65,10 +65,9 @@ for (const def of chosen) {
     const g = new THREE.Group();
     let baseY = 0;
     if (def.spec.placement === 'pedestal') {
-      const w = Math.max(0.36, inst.size.w + 0.2);
-      const d = Math.max(0.32, inst.size.d + 0.2);
-      baseY = (def.spec.pedestalHeight ?? 85) / 100;
-      g.add(createPedestal({ w, d, h: baseY, division: def.spec.line }).group);
+      const ps = pedestalSize(inst.size, def.spec.pedestalHeight);
+      baseY = ps.h;
+      g.add(createPedestal({ ...ps, division: def.spec.line }).group);
     }
     inst.root.position.y = baseY;
     g.add(inst.root);
@@ -92,6 +91,7 @@ for (const def of chosen) {
     console.error(err);
   }
 }
+bindEnvironment(scene);
 // Centre the row.
 const shift = new THREE.Vector3();
 bounds.getCenter(shift);

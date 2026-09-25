@@ -7,7 +7,7 @@ import { mergeModel } from './batch';
 import { buildShell } from './building';
 import type { WorldContext } from './context';
 import { OPENINGS, ZONES, type ZoneId } from './layout';
-import { createPedestal } from './pedestal';
+import { createPedestal, pedestalSize } from './pedestal';
 import type { Slot, ZoneModule } from './zone';
 import entrance from './zones/entrance';
 import medicale from './zones/medicale';
@@ -83,10 +83,7 @@ export async function buildWorld(
     let baseY = 0;
 
     if (spec.placement === 'pedestal') {
-      const margin = 0.1;
-      const w = Math.max(0.36, instance.size.w + margin * 2);
-      const d = Math.max(0.32, instance.size.d + margin * 2);
-      const h = (spec.pedestalHeight ?? 85) / 100;
+      const { w, d, h } = pedestalSize(instance.size, spec.pedestalHeight);
       const ped = createPedestal({ w, d, h, division: spec.line });
       ped.group.position.set(slot.x, 0, slot.z);
       ped.group.rotation.y = slot.rotY;
@@ -100,11 +97,7 @@ export async function buildWorld(
     root.position.set(slot.x, baseY, slot.z);
     root.rotation.y = slot.rotY;
     root.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh) {
-        if (m.castShadow === undefined) m.castShadow = true;
-        m.receiveShadow = true;
-      }
+      if ((o as THREE.Mesh).isMesh) o.receiveShadow = true;
     });
     ctx.addDynamic(root);
     root.updateMatrixWorld(true);

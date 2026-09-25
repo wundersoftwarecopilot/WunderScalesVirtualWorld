@@ -27,6 +27,8 @@ export interface LookDelta {
 /**
  * Keyboard + pointer input. Pointer drags anywhere (canvas or a logo link) turn the view;
  * a drag longer than DRAG_PX cancels the click that would otherwise follow a link.
+ * The on-screen arrows are drawn in WebGL, under the layer of logo links: a press on an arrow
+ * always walks, and the click it would send to a link underneath is swallowed.
  */
 export class Input {
   readonly held = new Set<Intent>();
@@ -37,8 +39,10 @@ export class Input {
   private drag: { id: number; x: number; y: number; moved: number } | null = null;
   private suppressClickUntil = 0;
   hud: HudHitTester | null = null;
-  /** Timestamp of the last movement input; the HUD uses it to fade the hint arrows. */
-  lastMoveAt = 0;
+  /** Timestamp of the last keyboard movement; the HUD dims its arrows for keyboard walkers. */
+  lastKeyMoveAt = 0;
+  /** Timestamp of the last press on an on-screen arrow (mouse, pen or touch). */
+  lastPadAt = 0;
   usedTouch = false;
   static readonly DRAG_PX = 6;
 
@@ -54,7 +58,9 @@ export class Input {
     window.addEventListener('click', this.onClickCapture, true);
     window.addEventListener('dragstart', (e) => e.preventDefault());
     window.addEventListener('contextmenu', (e) => {
-      if (e.target === target) e.preventDefault();
+      // Also while an arrow is held: a long press on an arrow over a logo must not open the
+      // link's menu.
+      if (e.target === target || this.hudPresses.size > 0) e.preventDefault();
     });
   }
 
@@ -62,7 +68,6 @@ export class Input {
   setIntent(intent: Intent, down: boolean): void {
     if (down) this.forced.add(intent);
     else this.forced.delete(intent);
-    if (down) this.lastMoveAt = performance.now();
     this.recompute();
   }
 
@@ -75,6 +80,11 @@ export class Input {
 
   isHeld(i: Intent): boolean {
     return this.held.has(i);
+  }
+
+  /** True while any on-screen arrow is pressed. */
+  get padHeld(): boolean {
+    return this.hudPresses.size > 0;
   }
 
   private recompute = (): void => {
@@ -103,7 +113,7 @@ export class Input {
     e.preventDefault();
     this.keys.add(e.code);
     this.recompute();
-    if (intent !== 'run') this.lastMoveAt = performance.now();
+    if (intent !== 'run') this.lastKeyMoveAt = performance.now();
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
@@ -118,10 +128,12 @@ export class Input {
     if (e.target === this.target) this.target.focus({ preventScroll: true });
     const hudIntent = this.hud?.hit(e.clientX, e.clientY) ?? null;
     if (hudIntent) {
+      // preventDefault on pointerdown does not cancel the click a logo link under the arrow
+      // would receive: onClickCapture drops it (while held and just after release).
       e.preventDefault();
       this.hudPresses.set(e.pointerId, hudIntent);
       this.recompute();
-      this.lastMoveAt = performance.now();
+      this.lastPadAt = performance.now();
       return;
     }
     if (this.drag === null && (e.button === 0 || e.pointerType !== 'mouse')) {
@@ -144,15 +156,20 @@ export class Input {
   };
 
   private onPointerUp = (e: PointerEvent): void => {
-    if (this.hudPresses.delete(e.pointerId)) this.recompute();
+    const now = performance.now();
+    if (this.hudPresses.delete(e.pointerId)) {
+      this.recompute();
+      this.lastPadAt = now;
+      this.suppressClickUntil = Math.max(this.suppressClickUntil, now + 350);
+    }
     if (this.drag && e.pointerId === this.drag.id) {
-      if (this.drag.moved > Input.DRAG_PX) this.suppressClickUntil = performance.now() + 350;
+      if (this.drag.moved > Input.DRAG_PX) this.suppressClickUntil = Math.max(this.suppressClickUntil, now + 350);
       this.drag = null;
     }
   };
 
   private onClickCapture = (e: MouseEvent): void => {
-    if (performance.now() < this.suppressClickUntil) {
+    if (this.hudPresses.size > 0 || performance.now() < this.suppressClickUntil) {
       e.preventDefault();
       e.stopPropagation();
     }

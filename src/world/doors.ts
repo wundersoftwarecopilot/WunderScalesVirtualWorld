@@ -28,8 +28,8 @@ export function slidingDoors(ctx: WorldContext, o: { x: number; z: number; width
       m.position.set(x, y, 0);
       p.add(m);
     }
-    // A thin red line at eye height so the glass reads as a door.
-    const band = new THREE.Mesh(new THREE.BoxGeometry(panelW - 0.1, 0.03, 0.025), new THREE.MeshStandardMaterial({ color: '#d90000', roughness: 0.5 }));
+    // A thin dark manifestation line at eye height so the glass reads as a door.
+    const band = new THREE.Mesh(new THREE.BoxGeometry(panelW - 0.1, 0.03, 0.025), ctx.mats.dark);
     band.position.y = 1.45;
     p.add(band);
     p.userData.closedX = side * (panelW / 2 - 0.02);

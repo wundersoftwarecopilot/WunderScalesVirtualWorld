@@ -5,10 +5,26 @@ import { CollisionWorld } from '../core/collision';
 import type { LinkLayer } from '../core/links';
 import type { Rect } from '../core/rect';
 import { StaticBatcher } from './batch';
+import type { ZoneId } from './layout';
 import { createMaterials, type Materials } from './materials';
 import { createPainting, type PaintingOptions } from './painting';
 
 export type Updater = (dt: number, t: number) => void;
+
+/**
+ * A room inside a zone behind a partition lower than the ceiling (see world/portals.ts): content
+ * inside `rect` and below `maxY` can only be seen through `portal` from the rest of the zone (the
+ * visitor's eye is always below the partition top). Taller content stays in the zone.
+ */
+export interface SubRoom {
+  id: string;
+  parent: ZoneId;
+  rect: Rect;
+  /** Partition top, metres: content reaching above it is visible over the partition. */
+  maxY: number;
+  /** The opening: a vertical quad on the plane `axis = at`, from `from` to `to`, floor to `top`. */
+  portal: { axis: 'x' | 'z'; at: number; from: number; to: number; top: number };
+}
 
 /**
  * Everything the world builders share: scene graph, materials, static batching, collisions,
@@ -20,6 +36,8 @@ export class WorldContext {
   readonly collisions = new CollisionWorld(2);
   readonly updaters: Updater[] = [];
   readonly occluders: THREE.Box3[] = [];
+  /** Partitioned rooms inside zones, for the portal culler. */
+  readonly subRooms: SubRoom[] = [];
   /** Dynamic (non-batched) content lives here: logos, scales, doors, anything animated. */
   readonly dynamic = new THREE.Group();
   /** Merged static geometry ends up here after bake(). */
@@ -65,13 +83,21 @@ export class WorldContext {
     }
   }
 
+  /** Declare a room behind a partition (see SubRoom) so the world can cull it through its opening. */
+  addSubRoom(room: SubRoom): void {
+    this.subRooms.push(room);
+  }
+
   onUpdate(fn: Updater): void {
     this.updaters.push(fn);
   }
 
-  /** Make an object clickable (it must already be positioned in the world). Hover lights up logos inside it. */
-  link(obj: THREE.Object3D, url: string, label: string): void {
-    this.links.register(obj, url, label, (on) => setLogoHover(obj, on));
+  /**
+   * Make an object clickable (it must already be positioned in the world). Hover lights up logos
+   * inside it. `bounds` narrows the clickable circle to a part of it (a painting's logo).
+   */
+  link(obj: THREE.Object3D, url: string, label: string, bounds?: THREE.Object3D): void {
+    this.links.register(obj, url, label, (on) => setLogoHover(obj, on), bounds);
   }
 
   /**
@@ -98,7 +124,12 @@ export class WorldContext {
     g.position.set(at.x, at.y, at.z);
     g.rotation.y = at.rotY ?? 0;
     this.addDynamic(g);
-    this.link(g, opts.url ?? URLS[division], opts.label ?? LABELS[division]);
+    // The frame never changes: merge it with every other frame (one draw call for all of them).
+    // The group keeps the painted face and the logo, which is what the link and hover need.
+    g.updateWorldMatrix(true, true);
+    for (const c of [...g.children]) if (c.userData.paintingStatic) this.addStatic(c);
+    // The click target is the logo on the canvas, not the whole picture.
+    this.link(g, opts.url ?? URLS[division], opts.label ?? LABELS[division], g.userData.logo as THREE.Object3D);
     return g;
   }
 

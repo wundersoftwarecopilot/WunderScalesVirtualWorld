@@ -36,8 +36,13 @@ export interface Opening {
   x: number;
   z: number;
   width: number;
+  /** Height of the opening (top of the doorway, or of the glazing for the front). */
+  top: number;
   axis: 'x' | 'z';
 }
+
+/** The lobby's glass front on the facade (z = 16): the visitor sees in and out through all of it. */
+export const FACADE_GLASS = { x0: -7, x1: 7, top: 4.3 };
 
 export const BUILDING = rect(-34, -16, 34, 16);
 export const PLAZA = rect(-24, 16, 24, 34);
@@ -51,13 +56,13 @@ export const ZONES: Record<ZoneId, ZoneShell> = {
 
 export const OPENINGS: Opening[] = [
   // Front door on the facade (sliding glass doors).
-  { id: 'front', x: 0, z: 16, width: 3.2, axis: 'z', clear: rect(-2, 13.5, 2, 18.5) },
+  { id: 'front', x: 0, z: 16, width: 3.2, top: 2.8, axis: 'z', clear: rect(-2, 13.5, 2, 18.5) },
   // Lobby → Medicale (west wall of the lobby).
-  { id: 'to-medicale', x: -10, z: 8, width: 4, axis: 'x', clear: rect(-12.5, 5.8, -7.5, 10.2) },
+  { id: 'to-medicale', x: -10, z: 8, width: 4, top: 3.1, axis: 'x', clear: rect(-12.5, 5.8, -7.5, 10.2) },
   // Lobby → Industriale (east wall of the lobby).
-  { id: 'to-industriale', x: 10, z: 8, width: 4, axis: 'x', clear: rect(7.5, 5.8, 12.5, 10.2) },
+  { id: 'to-industriale', x: 10, z: 8, width: 4, top: 3.1, axis: 'x', clear: rect(7.5, 5.8, 12.5, 10.2) },
   // Lobby → Design gallery (north wall of the lobby).
-  { id: 'to-design', x: 0, z: 0, width: 5, axis: 'z', clear: rect(-2.8, -2.5, 2.8, 2.5) },
+  { id: 'to-design', x: 0, z: 0, width: 5, top: 3.6, axis: 'z', clear: rect(-2.8, -2.5, 2.8, 2.5) },
 ];
 
 /** Where the visitor starts: on the plaza, facing the facade (yaw 0 = looking towards -Z). */

@@ -11,11 +11,14 @@ export function detectQuality(): Quality {
   const coarse = window.matchMedia('(pointer: coarse)').matches;
   const small = Math.min(window.innerWidth, window.innerHeight) < 700;
   const mobile = coarse || small;
-  return {
-    mobile,
-    pixelRatio: Math.min(window.devicePixelRatio || 1, mobile ? 1.25 : 2),
-    shadowMap: mobile ? 1024 : 2048,
-  };
+  const q: Quality = { mobile, pixelRatio: 1, shadowMap: mobile ? 1024 : 2048 };
+  q.pixelRatio = pixelRatioFor(q);
+  return q;
+}
+
+/** Device pixel ratio capped for the quality tier (re-read on every resize). */
+export function pixelRatioFor(q: Pick<Quality, 'mobile'>): number {
+  return Math.min(window.devicePixelRatio || 1, q.mobile ? 1.25 : 2);
 }
 
 /** Returns null when WebGL is not available (the page then shows a plain logo link). */
@@ -41,10 +44,39 @@ export function createRenderer(canvas: HTMLCanvasElement, q: Quality): THREE.Web
 /** Neutral studio reflections for metals and glass, generated in code (no HDR download). */
 export function applyEnvironment(renderer: THREE.WebGLRenderer, scene: THREE.Scene): void {
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const room = new RoomEnvironment();
+  const env = pmrem.fromScene(room, 0.04).texture;
+  room.dispose();
+  scene.environment?.dispose();
   scene.environment = env;
   scene.environmentIntensity = 0.55;
   pmrem.dispose();
+}
+
+/**
+ * Point every material that asked for its own reflection strength (userData.envGain, e.g.
+ * chrome) at the scene's environment explicitly: only then does three.js honour the material's
+ * envMapIntensity instead of scene.environmentIntensity. Call after building the world and
+ * again whenever the environment is regenerated.
+ */
+export function bindEnvironment(scene: THREE.Scene): void {
+  const seen = new Set<THREE.Material>();
+  scene.traverse((o) => {
+    const mat = (o as THREE.Mesh).material;
+    if (!mat) return;
+    for (const m of Array.isArray(mat) ? mat : [mat]) {
+      if (seen.has(m)) continue;
+      seen.add(m);
+      const gain = m.userData.envGain as number | undefined;
+      if (gain === undefined || !(m as THREE.MeshStandardMaterial).isMeshStandardMaterial) continue;
+      const s = m as THREE.MeshStandardMaterial;
+      if (s.envMap !== scene.environment) {
+        s.envMap = scene.environment;
+        s.needsUpdate = true;
+      }
+      s.envMapIntensity = gain;
+    }
+  });
 }
 
 /** Overhead "skylight" sun with one static shadow map over the whole site, plus sky fill. */

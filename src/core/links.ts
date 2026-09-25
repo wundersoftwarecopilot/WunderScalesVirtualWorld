@@ -16,6 +16,8 @@ export interface LinkTarget {
   visible: boolean;
   occluded: boolean;
   hovered: boolean;
+  /** Last anchor placement written to the DOM (styles are only rewritten when it moves). */
+  placed: { x: number; y: number; size: number; z: number };
 }
 
 const MAX_DIST = 26; // metres; further logos are too small to click anyway
@@ -26,8 +28,13 @@ export class LinkLayer {
   private readonly ray = new THREE.Ray();
   private readonly hit = new THREE.Vector3();
   private occlusionCursor = 0;
+  // Scratch objects: update() runs every frame over every link, so it allocates nothing.
   private readonly tmpV = new THREE.Vector3();
   private readonly tmpC = new THREE.Vector3();
+  private readonly ndc = new THREE.Vector3();
+  private readonly occC = new THREE.Vector3();
+  private readonly occD = new THREE.Vector3();
+  private readonly sph = new THREE.Sphere();
   private readonly frustum = new THREE.Frustum();
   private readonly projScreen = new THREE.Matrix4();
   /** World-space boxes that can hide a logo (walls, tall shelving). Filled by the world builder. */
@@ -35,12 +42,16 @@ export class LinkLayer {
 
   constructor(private readonly layer: HTMLElement) {}
 
-  register(object: THREE.Object3D, url: string, label: string, onHover?: (hover: boolean) => void): LinkTarget {
+  /**
+   * `bounds` (default: the object itself) is the part whose projected size makes the clickable
+   * circle, e.g. only the logo of a painting, not the whole canvas.
+   */
+  register(object: THREE.Object3D, url: string, label: string, onHover?: (hover: boolean) => void, bounds: THREE.Object3D = object): LinkTarget {
     const box = new THREE.Box3();
     object.updateWorldMatrix(true, true);
     // Bounds in the object's local frame so the link follows it if it moves.
     const inv = new THREE.Matrix4().copy(object.matrixWorld).invert();
-    object.traverse((o) => {
+    bounds.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh || !m.geometry) return;
       if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
@@ -48,7 +59,7 @@ export class LinkLayer {
       box.union(b);
     });
     const sphere = box.isEmpty() ? new THREE.Sphere(new THREE.Vector3(), 0.1) : box.getBoundingSphere(new THREE.Sphere());
-    const t: LinkTarget = { object, url, label, onHover, sphere, visible: false, occluded: false, hovered: false };
+    const t: LinkTarget = { object, url, label, onHover, sphere, visible: false, occluded: false, hovered: false, placed: { x: NaN, y: NaN, size: NaN, z: NaN } };
     object.userData.link = t;
     this.links.push(t);
     return t;
@@ -97,20 +108,39 @@ export class LinkLayer {
       const scale = t.object.matrixWorld.getMaxScaleOnAxis();
       const radius = t.sphere.radius * scale;
       const dist = center.distanceTo(camPos);
-      const inView =
-        t.object.visible && dist < MAX_DIST && this.frustum.intersectsSphere(new THREE.Sphere(center, radius));
+      // Layers: the world's portal culler moves logos in rooms the camera cannot see off the
+      // camera's layer; their links go with them.
+      this.sph.center.copy(center);
+      this.sph.radius = radius;
+      const inView = t.object.visible && t.object.layers.test(camera.layers) && dist < MAX_DIST && this.frustum.intersectsSphere(this.sph);
       let show = false;
       if (inView) {
         if (!t.visible) t.occluded = this.isOccluded(t, camPos); // freshly visible: test now
-        const ndc = center.clone().project(camera);
+        const ndc = this.ndc.copy(center).project(camera);
         const px = ((ndc.x + 1) / 2) * width;
         const py = ((1 - ndc.y) / 2) * height;
         const r = (radius / Math.max(0.01, dist)) * focal;
         if (ndc.z < 1 && r >= MIN_PX / 2 && !t.occluded) {
           const a = this.anchorFor(t);
           const size = Math.min(r * 2, Math.max(width, height));
-          a.style.width = a.style.height = size.toFixed(1) + 'px';
-          a.style.transform = `translate(${(px - size / 2).toFixed(1)}px, ${(py - size / 2).toFixed(1)}px)`;
+          const x = px - size / 2;
+          const y = py - size / 2;
+          const p = t.placed;
+          if (!(Math.abs(p.size - size) < 0.5)) {
+            a.style.width = a.style.height = size.toFixed(1) + 'px';
+            p.size = size;
+          }
+          if (!(Math.abs(p.x - x) < 0.5 && Math.abs(p.y - y) < 0.5)) {
+            a.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+            p.x = x;
+            p.y = y;
+          }
+          // Where two links overlap, the nearer logo gets the click.
+          const z = 100000 - Math.round(dist * 100);
+          if (p.z !== z) {
+            a.style.zIndex = String(z);
+            p.z = z;
+          }
           show = true;
         }
       }
@@ -125,8 +155,8 @@ export class LinkLayer {
 
   private isOccluded(t: LinkTarget, camPos: THREE.Vector3): boolean {
     if (!this.occluders.length) return false;
-    const center = t.sphere.center.clone().applyMatrix4(t.object.matrixWorld);
-    const dir = center.clone().sub(camPos);
+    const center = this.occC.copy(t.sphere.center).applyMatrix4(t.object.matrixWorld);
+    const dir = this.occD.copy(center).sub(camPos);
     const dist = dir.length();
     if (dist < 0.01) return false;
     // Stop a little before the logo so the wall it hangs on does not count.

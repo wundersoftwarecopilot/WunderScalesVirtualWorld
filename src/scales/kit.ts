@@ -21,6 +21,16 @@ function std(color: THREE.ColorRepresentation, roughness: number, metalness = 0,
   return new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra });
 }
 
+/**
+ * Give a mirror-like material its own reflection strength. three.js overrides a material's
+ * envMapIntensity with the scene's whenever the material uses scene.environment, so the world
+ * binds the environment to these materials explicitly (core/renderer.ts bindEnvironment).
+ */
+export function withEnvGain<M extends THREE.MeshStandardMaterial>(m: M, gain: number): M {
+  m.userData.envGain = gain;
+  return m;
+}
+
 export const MAT = {
   /** ABS housings, display heads. */
   abs: std('#eeeeea', 0.45),
@@ -33,7 +43,12 @@ export const MAT = {
   paintIndustrial: std('#7a7a7a', 0.5, 0.2),
   stainless: std('#b8bcc0', 0.3, 1),
   brushed: std('#a9adb1', 0.42, 1),
-  chrome: std('#e8e8e8', 0.12, 1),
+  /**
+   * Mirror metal: it shows almost nothing but the environment, which the scene dims (0.55) for
+   * everything else; its own gain (userData.envGain, see core/renderer bindEnvironment) keeps
+   * chrome reading as polished chrome, not dark gunmetal.
+   */
+  chrome: withEnvGain(std('#e8e8e8', 0.12, 1), 1.9),
   gold: std('#c9a55a', 0.25, 1),
   aluminium: std('#c3c6c9', 0.35, 0.9),
   rubber: std('#1e1e1e', 0.92),

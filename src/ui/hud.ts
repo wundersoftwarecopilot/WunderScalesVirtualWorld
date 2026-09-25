@@ -5,8 +5,9 @@ import { arrowGeometry } from './keysign';
 
 /**
  * Screen-space overlay drawn with WebGL (orthographic camera in CSS pixels, origin bottom-left):
- * - four thin arrow buttons: touch controls on phones, a movement hint on desktop that fades
- *   once the visitor starts walking;
+ * - four thin arrow buttons: touch controls on phones; on desktop both a movement hint and the
+ *   mouse-only way to walk. They dim (never vanish, never stop working) a few seconds after the
+ *   visitor walks with the keyboard, and stay bright while the pointer uses them;
  * - the loading screen (spinning logo + progress ring) while the world is built.
  */
 function roundedRect(w: number, h: number, r: number, hole?: number): THREE.Shape {
@@ -35,10 +36,19 @@ interface Btn {
   fill: THREE.MeshBasicMaterial;
   ring: THREE.MeshBasicMaterial;
   arrow: THREE.MeshBasicMaterial;
+  /** Grid cell in the inverted T (0,1 = top middle). */
+  gx: number;
+  gy: number;
+  /** Centre in overlay pixels (origin bottom-left) and side length, set by resize(). */
   cx: number;
   cy: number;
   size: number;
 }
+
+/** Keyboard walkers see the arrows dimmed to this opacity (still visible, still pressable). */
+const DIM = 0.35;
+/** Segments of the loader's progress ring (drawn with a draw range, built once). */
+const RING_SEGMENTS = 96;
 
 export class Hud implements HudHitTester {
   readonly scene = new THREE.Scene();
@@ -81,19 +91,18 @@ export class Hud implements HudHitTester {
       r.renderOrder = 2;
       a.renderOrder = 3;
       group.add(f, r, a);
-      void gx;
-      void gy;
       this.pad.add(group);
-      this.buttons.push({ intent, group, fill, ring, arrow, cx: gx, cy: gy, size: 1 });
+      this.buttons.push({ intent, group, fill, ring, arrow, gx, gy, cx: 0, cy: 0, size: 1 });
     }
 
     // Loader: logo + progress ring in the middle of the screen.
     this.loaderLogo = createLogo({ diameter: 1, style: 'flat' });
     let order = 1;
     this.loaderLogo.traverse((o) => {
-      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      const m = (o as THREE.Mesh).material as THREE.Material | undefined;
       if (m) {
-        (o as THREE.Mesh).material = new THREE.MeshBasicMaterial({ color: m.color, depthTest: false });
+        // Unlit and not tone mapped: the vertex colours come out as the exact brand colours.
+        (o as THREE.Mesh).material = new THREE.MeshBasicMaterial({ vertexColors: true, depthTest: false, toneMapped: false });
         o.renderOrder = order++;
       }
     });
@@ -101,7 +110,13 @@ export class Hud implements HudHitTester {
     this.progressTrack = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.64, 96), new THREE.MeshBasicMaterial({ color: '#c8cbce', depthTest: false }));
     this.progressTrack.renderOrder = 1;
     this.loader.add(this.progressTrack);
-    this.progressRing = new THREE.Mesh(new THREE.RingGeometry(0.615, 0.645, 96, 1, 0, 0.001), new THREE.MeshBasicMaterial({ color: '#d90000', depthTest: false }));
+    // The full ring runs clockwise from 12 o'clock (negative sweep, so both faces are drawn);
+    // progress only changes its draw range: no per-frame geometry.
+    this.progressRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.615, 0.645, RING_SEGMENTS, 1, Math.PI / 2, -Math.PI * 2),
+      new THREE.MeshBasicMaterial({ color: '#d90000', depthTest: false, side: THREE.DoubleSide }),
+    );
+    this.progressRing.geometry.setDrawRange(0, 0);
     this.progressRing.renderOrder = 2;
     this.loader.add(this.progressRing);
     const bg = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: '#e6e7e9', depthTest: false }));
@@ -112,7 +127,6 @@ export class Hud implements HudHitTester {
   }
 
   resize(w: number, h: number): void {
-
     this.height = h;
     this.camera.left = 0;
     this.camera.right = w;
@@ -124,15 +138,13 @@ export class Hud implements HudHitTester {
     const margin = this.touch ? 22 : 24;
     const baseX = margin + size * 1.5 + gap;
     const baseY = margin + size / 2;
-    this.buttons.forEach((b, i) => {
-      const gx = [0, -1, 0, 1][i];
-      const gy = [1, 0, 0, 0][i];
-      b.cx = baseX + gx * (size + gap);
-      b.cy = baseY + gy * (size + gap);
+    for (const b of this.buttons) {
+      b.cx = baseX + b.gx * (size + gap);
+      b.cy = baseY + b.gy * (size + gap);
       b.size = size;
       b.group.position.set(b.cx, b.cy, 0);
       b.group.scale.setScalar(size);
-    });
+    }
     const s = Math.min(w, h) * 0.22;
     this.loader.position.set(w / 2, h / 2, 0);
     this.loaderLogo.scale.setScalar(s);
@@ -142,9 +154,9 @@ export class Hud implements HudHitTester {
     bg.scale.set(w * 2, h * 2, 1);
   }
 
-  /** Which arrow button (if any) is under a screen point. */
+  /** Which arrow button (if any) is under a screen point. The pad always answers once loaded. */
   hit(clientX: number, clientY: number): Intent | null {
-    if (this.loading || this.opacity < 0.3) return null;
+    if (this.loading) return null;
     const x = clientX;
     const y = this.height - clientY;
     for (const b of this.buttons) {
@@ -153,23 +165,32 @@ export class Hud implements HudHitTester {
     return null;
   }
 
+  /** Centre of an arrow button in client (CSS) pixels, for tests. */
+  center(intent: Intent): { x: number; y: number } {
+    const b = this.buttons.find((x) => x.intent === intent)!;
+    return { x: b.cx, y: this.height - b.cy };
+  }
+
   update(dt: number, t: number): void {
     this.loader.visible = this.loading;
     this.pad.visible = !this.loading;
     if (this.loading) {
       this.loaderLogo.rotation.y = Math.sin(t * 1.4) * 0.5;
-      const p = THREE.MathUtils.clamp(this.progress, 0.001, 1);
-      this.progressRing.geometry.dispose();
-      this.progressRing.geometry = new THREE.RingGeometry(0.615, 0.645, 96, 1, Math.PI / 2 - p * Math.PI * 2, p * Math.PI * 2);
+      const p = THREE.MathUtils.clamp(this.progress, 0, 1);
+      // RingGeometry indices: 6 per segment (one phi segment), in sweep order.
+      this.progressRing.geometry.setDrawRange(0, Math.ceil(p * RING_SEGMENTS) * 6);
       return;
     }
-    // Desktop: the arrows are a hint; fade them 4 s after the visitor starts moving.
-    const touch = this.touch || this.input.usedTouch;
-    let target = 1;
-    if (!touch) {
-      const since = this.input.lastMoveAt ? (performance.now() - this.input.lastMoveAt) / 1000 : -1;
-      target = this.input.lastMoveAt === 0 ? 1 : since < 4 ? 1 : 0;
-    } else target = 0.95;
+    let target = 0.95;
+    if (!(this.touch || this.input.usedTouch)) {
+      // Desktop: full while the pointer uses the pad (and a while after), dimmed 4 s after
+      // keyboard walking. Never hidden: it is the only way to walk for a mouse-only visitor.
+      const now = performance.now();
+      const inp = this.input;
+      const padRecent = inp.padHeld || (inp.lastPadAt > 0 && now - inp.lastPadAt < 6000);
+      const keysIdle = inp.lastKeyMoveAt > 0 && now - inp.lastKeyMoveAt > 4000;
+      target = padRecent || !keysIdle ? 1 : DIM;
+    }
     this.opacity += (target - this.opacity) * Math.min(1, dt * 2.5);
     for (const b of this.buttons) {
       const on = this.input.isHeld(b.intent);
@@ -178,6 +199,6 @@ export class Hud implements HudHitTester {
       b.ring.opacity = 0.9 * this.opacity;
       b.arrow.opacity = 0.95 * this.opacity;
     }
-    this.pad.visible = this.opacity > 0.02;
+    this.pad.visible = true;
   }
 }

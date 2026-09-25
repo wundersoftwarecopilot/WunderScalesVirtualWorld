@@ -12,6 +12,7 @@ body { overscroll-behavior: none; -webkit-user-select: none; user-select: none; 
 #links a {
   position: absolute; left: 0; top: 0; display: block; pointer-events: auto; touch-action: none;
   border-radius: 50%; -webkit-user-drag: none; background: transparent; cursor: pointer;
+  -webkit-touch-callout: none; /* no link preview on a long press (e.g. holding an arrow over a logo) */
 }
 #links a:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 #nogl { position: fixed; inset: 0; display: grid; place-items: center; }

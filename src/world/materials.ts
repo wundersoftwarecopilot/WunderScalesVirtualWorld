@@ -10,7 +10,8 @@ export const GREY = {
   floorWing: '#7c7f83',
   floorGallery: '#b4b6b9',
   wall: '#c7c9cc',
-  wallDark: '#a9acb0',
+  /** Charcoal frame of the lobby's glass box and the plaza totem: the facade's silhouette. */
+  wallDark: '#50545a',
   ceiling: '#e1e2e4',
   trim: '#9b9ea2',
   dark: '#3a3d42',
@@ -33,7 +34,10 @@ export function createMaterials() {
     floorGallery: std(GREY.floorGallery, 0.4),
     wall: std(GREY.wall, 0.92),
     wallDark: std(GREY.wallDark, 0.9),
-    ceiling: std(GREY.ceiling, 0.95),
+    // The ceiling is the roof slab's underside: it faces down, so it gets only the dark ground
+    // colour of the hemisphere light and no sun. A faked bounce (emissive) keeps it lighter than
+    // the floors. Nobody sees the roof's top face, the only other place this material shows.
+    ceiling: std(GREY.ceiling, 0.95, 0, { emissive: GREY.ceiling, emissiveIntensity: 0.53 }),
     trim: std(GREY.trim, 0.7),
     dark: std(GREY.dark, 0.6),
     darker: std(GREY.darker, 0.5),

@@ -41,14 +41,17 @@ test('arrow keys move the visitor and walls stop them', async ({ page }) => {
   await page.waitForFunction((y0) => window.__wunder!.player.yaw > y0 + 0.2, yaw0, { timeout: 60_000 });
   await page.keyboard.up('ArrowLeft');
 
-  // Walk into the lobby's west wall (away from the doorway): the wall must hold.
-  await page.evaluate(() => window.__wunder!.player.teleport(-8.5, 13, Math.PI / 2));
+  // Walk into the lobby's west wall (away from the doorway): the wall must hold. z = 14.5 is a
+  // stretch of bare wall between the corner bench and the planter by the glass, so the visitor
+  // reaches the wall itself (not a prop in front of it).
+  await page.evaluate(() => window.__wunder!.player.teleport(-8.5, 14.5, Math.PI / 2));
   await page.keyboard.down('ArrowUp');
   const f0 = await page.evaluate(() => window.__wunder!.frames);
   await page.waitForFunction((f) => window.__wunder!.frames > f + 60, f0, { timeout: 120_000 });
   await page.keyboard.up('ArrowUp');
   const x = await page.evaluate(() => window.__wunder!.player.x);
-  expect(x).toBeGreaterThan(-10 + 0.15);
+  expect(x).toBeGreaterThan(-10 + 0.15); // not through the wall
+  expect(x).toBeLessThan(-9.3); // but right up against it
 });
 
 test('logos become real links to the Wunder sites', async ({ page }) => {
@@ -68,24 +71,118 @@ test('logos become real links to the Wunder sites', async ({ page }) => {
   expect(all.some((u) => u.startsWith('https://design.wunder.it/'))).toBe(true);
 });
 
-test('stepping on a floor scale starts a weighing', async ({ page }) => {
+test('walking onto a floor scale starts a weighing', async ({ page }) => {
   const errors: string[] = [];
   await openArtifact(page, errors);
-  const target = await page.evaluate(() => {
-    const s = window.__wunder!.scales.find((p) => p.instance.standOn && p.spec.placement === 'floor');
-    return s ? { id: s.spec.id, x: s.slot.x, z: s.slot.z, rotY: s.slot.rotY, so: s.instance.standOn } : null;
+  await page.locator('#gl').focus();
+  // A medicale column scale (the platform is partly under its column) and the gallery hero.
+  for (const id of ['r2020', 'r150-gold']) {
+    const start = await page.evaluate((id) => {
+      const s = window.__wunder!.scales.find((p) => p.spec.id === id);
+      const so = s?.instance.standOn;
+      if (!s || !so || s.spec.placement !== 'floor') return null;
+      // Platform centre (local → world), then 1 m out in front of the platform's front edge,
+      // facing the scale (front = local +Z; the visitor's yaw 0 looks towards −Z).
+      const c = Math.cos(s.slot.rotY);
+      const n = Math.sin(s.slot.rotY);
+      const cx = s.slot.x + so.x * c + so.z * n;
+      const cz = s.slot.z - so.x * n + so.z * c;
+      const out = so.d / 2 + 1.0;
+      return { x: cx + n * out, z: cz + c * out, yaw: s.slot.rotY };
+    }, id);
+    expect(start, id).not.toBeNull();
+    await page.evaluate((s) => window.__wunder!.player.teleport(s!.x, s!.z, s!.yaw), start);
+    const f0 = await page.evaluate(() => window.__wunder!.frames);
+    await page.waitForFunction((f) => window.__wunder!.frames > f + 2, f0, { timeout: 60_000 });
+    expect(await page.evaluate((id) => window.__wunder!.scales.find((p) => p.spec.id === id)!.active, id), id).toBe(false);
+    // Walk forward until the platform weighs the visitor: a collider in the way would stop them
+    // short of it and time out here.
+    await page.keyboard.down('ArrowUp');
+    await page.waitForFunction(
+      (id) => window.__wunder!.scales.find((p) => p.spec.id === id)!.active && window.__wunder!.player.floorTarget > 0,
+      id,
+      { timeout: 90_000 },
+    );
+    await page.keyboard.up('ArrowUp');
+  }
+  expect(errors.filter((e) => !benign(e))).toEqual([]);
+});
+
+/**
+ * Put a real logo link right under the forward arrow (the lobby floor logo, moved 1.5 m in front
+ * of the camera along the ray through the arrow): independent of where the world's logos happen
+ * to project, the arrow and a live <a> overlap. Returns the arrow's client coordinates.
+ */
+async function linkUnderForwardArrow(page: import('@playwright/test').Page): Promise<{ x: number; y: number }> {
+  await page.evaluate(() => window.__wunder!.player.teleport(0, 11.5, 0, 0));
+  const at = await page.evaluate(() => {
+    const w = window.__wunder!;
+    const p = w.hud.center('forward');
+    const cam = w.scene.children.find((o) => (o as { isPerspectiveCamera?: boolean }).isPerspectiveCamera) as import('three').PerspectiveCamera;
+    cam.updateMatrixWorld();
+    const V = cam.position.constructor as typeof import('three').Vector3;
+    const ndc = new V((p.x / window.innerWidth) * 2 - 1, 1 - (p.y / window.innerHeight) * 2, 0.5).unproject(cam);
+    const dir = ndc.sub(cam.position).normalize();
+    const link = w.links.links.find((l) => l.url === 'https://www.wunder.it/' && Math.abs(l.object.position.z - 12.85) < 0.05 && l.object.position.y < 0.05);
+    if (!link) return null;
+    link.object.position.copy(cam.position).addScaledVector(dir, 1.5);
+    link.object.updateMatrixWorld(true);
+    return p;
   });
-  expect(target).not.toBeNull();
-  await page.evaluate((t) => {
-    // Stand on the platform centre (local → world).
-    const c = Math.cos(t!.rotY);
-    const s = Math.sin(t!.rotY);
-    const x = t!.x + t!.so!.x * c + t!.so!.z * s;
-    const z = t!.z - t!.so!.x * s + t!.so!.z * c;
-    window.__wunder!.player.teleport(x, z, t!.rotY + Math.PI);
-  }, target);
-  await page.waitForTimeout(800);
-  const active = await page.evaluate((id) => window.__wunder!.scales.find((p) => p.spec.id === id)!.active, target!.id);
-  expect(active).toBe(true);
-  expect(await page.evaluate(() => window.__wunder!.player.floorTarget)).toBeGreaterThan(0);
+  expect(at).not.toBeNull();
+  // Let the link layer place the anchor over the moved logo.
+  await page.waitForFunction(
+    (p) => {
+      const el = document.elementFromPoint(p.x, p.y);
+      return el?.tagName === 'A' && (el as HTMLAnchorElement).href === 'https://www.wunder.it/';
+    },
+    at!,
+    { timeout: 60_000 },
+  );
+  return at!;
+}
+
+test('pressing an on-screen arrow over a logo walks and does not open the link', async ({ page, context }) => {
+  const errors: string[] = [];
+  const popups: string[] = [];
+  context.on('page', (p) => popups.push(p.url()));
+  await context.route(/wunder\.it/, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '' }));
+  await openArtifact(page, errors);
+  const at = await linkUnderForwardArrow(page);
+  const z0 = await page.evaluate(() => window.__wunder!.player.z);
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.waitForFunction((z) => window.__wunder!.player.z < z - 0.1, z0, { timeout: 60_000 });
+  await page.mouse.up();
+  // Give a stray click time to open a tab, then check that none did.
+  const f0 = await page.evaluate(() => window.__wunder!.frames);
+  await page.waitForFunction((f) => window.__wunder!.frames > f + 3, f0, { timeout: 60_000 });
+  await page.waitForTimeout(500);
+  expect(popups).toEqual([]);
+  expect(errors.filter((e) => !benign(e))).toEqual([]);
+});
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 3 });
+
+  test('tapping an arrow over a logo does not open the link; the view is wider than tall', async ({ page, context }) => {
+    const errors: string[] = [];
+    const popups: string[] = [];
+    context.on('page', (p) => popups.push(p.url()));
+    await context.route(/wunder\.it/, (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '' }));
+    await openArtifact(page, errors);
+    // Portrait: the camera's vertical field of view opens up so the horizontal one stays usable.
+    const hfov = await page.evaluate(() => {
+      const cam = window.__wunder!.scene.children.find((o) => (o as { isPerspectiveCamera?: boolean }).isPerspectiveCamera) as import('three').PerspectiveCamera;
+      return (2 * Math.atan(Math.tan((cam.fov * Math.PI) / 360) * cam.aspect) * 180) / Math.PI;
+    });
+    expect(hfov).toBeGreaterThan(50);
+    const at = await linkUnderForwardArrow(page);
+    await page.touchscreen.tap(at.x, at.y);
+    const f0 = await page.evaluate(() => window.__wunder!.frames);
+    await page.waitForFunction((f) => window.__wunder!.frames > f + 3, f0, { timeout: 60_000 });
+    await page.waitForTimeout(500);
+    expect(popups).toEqual([]);
+    expect(errors.filter((e) => !benign(e))).toEqual([]);
+  });
 });

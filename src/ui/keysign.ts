@@ -8,6 +8,7 @@ import type { Input, Intent } from '../core/input';
  * Origin at the floor; faces +Z.
  */
 const RED = new THREE.Color('#d90000');
+const KEY_WHITE = new THREE.Color('#f7f7f7');
 
 function arrowShape(): THREE.Shape {
   // Thin arrow pointing +Y: shaft 0.12 wide, head 0.5 wide, total length 1 (centred).
@@ -83,7 +84,7 @@ export function createKeySign(input: Input): { object: THREE.Group; update(dt: n
         const on = input.isHeld(k.intent);
         const target = on ? 1 : 0;
         k.mat.emissiveIntensity += (target * 0.9 - k.mat.emissiveIntensity) * Math.min(1, dt * 14);
-        k.mat.color.lerpColors(new THREE.Color('#f7f7f7'), RED, k.mat.emissiveIntensity);
+        k.mat.color.lerpColors(KEY_WHITE, RED, k.mat.emissiveIntensity);
         k.arrow.color.copy(on ? white : dark);
         k.mesh.position.z = on ? 0.022 : 0.03;
       }

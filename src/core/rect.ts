@@ -10,31 +10,6 @@ export function rect(minX: number, minZ: number, maxX: number, maxZ: number): Re
   return { minX: Math.min(minX, maxX), maxX: Math.max(minX, maxX), minZ: Math.min(minZ, maxZ), maxZ: Math.max(minZ, maxZ) };
 }
 
-/** Rectangle from a centre point and full width (x) / depth (z). */
-export function rectAt(cx: number, cz: number, w: number, d: number): Rect {
-  return { minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2 };
-}
-
-export function rectCenter(r: Rect): { x: number; z: number } {
-  return { x: (r.minX + r.maxX) / 2, z: (r.minZ + r.maxZ) / 2 };
-}
-
-export function rectSize(r: Rect): { w: number; d: number } {
-  return { w: r.maxX - r.minX, d: r.maxZ - r.minZ };
-}
-
-export function rectsOverlap(a: Rect, b: Rect): boolean {
-  return a.minX < b.maxX && a.maxX > b.minX && a.minZ < b.maxZ && a.maxZ > b.minZ;
-}
-
-export function rectContains(r: Rect, x: number, z: number): boolean {
-  return x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ;
-}
-
-export function inflate(r: Rect, by: number): Rect {
-  return { minX: r.minX - by, maxX: r.maxX + by, minZ: r.minZ - by, maxZ: r.maxZ + by };
-}
-
 /**
  * Rotate a local rectangle (centre x,z and size w,d in an object's local frame) by rotY around
  * the object's origin and translate it to (ox, oz). Returns the world-space AABB.

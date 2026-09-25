@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { URLS, LABELS } from '../brand/urls';
 import type { WorldContext } from './context';
 import { slidingDoors } from './doors';
-import { BUILDING, OPENINGS, PLAZA, WALL, ZONES } from './layout';
+import { BUILDING, FACADE_GLASS, OPENINGS, PLAZA, WALL, ZONES } from './layout';
 
 /**
  * The building shell: ground, plaza, floors, walls with doorways, roofs/ceilings, ceiling light
@@ -41,15 +41,15 @@ export function buildShell(ctx: WorldContext, getVisitor: () => { x: number; z: 
     s.position.set((PLAZA.minX + PLAZA.maxX) / 2, 0.001, z);
     ctx.addStatic(s);
   }
-  // Plaza edges: the visitor cannot wander off into the void.
-  ctx.addCollider({ minX: PLAZA.minX - 1, maxX: PLAZA.minX, minZ: PLAZA.minZ, maxZ: PLAZA.maxZ });
-  ctx.addCollider({ minX: PLAZA.maxX, maxX: PLAZA.maxX + 1, minZ: PLAZA.minZ, maxZ: PLAZA.maxZ });
-  ctx.addCollider({ minX: PLAZA.minX, maxX: PLAZA.maxX, minZ: PLAZA.maxZ, maxZ: PLAZA.maxZ + 1 });
-  // Low kerb along the plaza edges.
+  // Plaza edges: a low kerb (0.3 m wide, inside the plaza) the visitor cannot step onto or past.
+  const KERB = 0.3;
+  ctx.addCollider({ minX: PLAZA.minX - 1, maxX: PLAZA.minX + KERB, minZ: PLAZA.minZ, maxZ: PLAZA.maxZ });
+  ctx.addCollider({ minX: PLAZA.maxX - KERB, maxX: PLAZA.maxX + 1, minZ: PLAZA.minZ, maxZ: PLAZA.maxZ });
+  ctx.addCollider({ minX: PLAZA.minX, maxX: PLAZA.maxX, minZ: PLAZA.maxZ - KERB, maxZ: PLAZA.maxZ + 1 });
   for (const [cx, cz, w, d] of [
-    [PLAZA.minX + 0.15, (PLAZA.minZ + PLAZA.maxZ) / 2, 0.3, PLAZA.maxZ - PLAZA.minZ],
-    [PLAZA.maxX - 0.15, (PLAZA.minZ + PLAZA.maxZ) / 2, 0.3, PLAZA.maxZ - PLAZA.minZ],
-    [(PLAZA.minX + PLAZA.maxX) / 2, PLAZA.maxZ - 0.15, PLAZA.maxX - PLAZA.minX, 0.3],
+    [PLAZA.minX + KERB / 2, (PLAZA.minZ + PLAZA.maxZ) / 2, KERB, PLAZA.maxZ - PLAZA.minZ],
+    [PLAZA.maxX - KERB / 2, (PLAZA.minZ + PLAZA.maxZ) / 2, KERB, PLAZA.maxZ - PLAZA.minZ],
+    [(PLAZA.minX + PLAZA.maxX) / 2, PLAZA.maxZ - KERB / 2, PLAZA.maxX - PLAZA.minX, KERB],
   ]) {
     const k = new THREE.Mesh(new THREE.BoxGeometry(w, 0.35, d), m.trim);
     k.position.set(cx, 0.175, cz);
@@ -76,7 +76,9 @@ export function buildShell(ctx: WorldContext, getVisitor: () => { x: number; z: 
     roof.castShadow = false;
     roof.receiveShadow = true;
     ctx.addStatic(roof);
-    // Ceiling light panels on a regular grid.
+    // Ceiling light panels on a regular grid. Not in the design gallery: its own wall washers
+    // and track spots light the room, and an office grid would flatten the museum mood.
+    if (z.id === 'design') continue;
     const step = z.id === 'industriale' ? 5 : 3.2;
     const panelGeo = new THREE.BoxGeometry(z.id === 'industriale' ? 2.4 : 1.2, 0.03, 0.28);
     for (let x = r.minX + step / 2 + 0.4; x < r.maxX - 0.4; x += step) {
@@ -112,20 +114,20 @@ export function buildShell(ctx: WorldContext, getVisitor: () => { x: number; z: 
     }
     segment(cursor, end, x, h, 'z', mat);
   };
-  function segment(a: number, b: number, at: number, h: number, axis: 'x' | 'z', mat: THREE.Material, y0 = 0) {
+  function segment(a: number, b: number, at: number, h: number, axis: 'x' | 'z', mat: THREE.Material, y0 = 0, depth = WALL) {
     const len = b - a;
     if (len <= 0.001) return;
-    const geo = axis === 'x' ? new THREE.BoxGeometry(len, h - y0, WALL) : new THREE.BoxGeometry(WALL, h - y0, len);
+    const geo = axis === 'x' ? new THREE.BoxGeometry(len, h - y0, depth) : new THREE.BoxGeometry(depth, h - y0, len);
     const mesh = new THREE.Mesh(geo, mat);
     const c = (a + b) / 2;
     if (axis === 'x') mesh.position.set(c, y0 + (h - y0) / 2, at);
     else mesh.position.set(at, y0 + (h - y0) / 2, c);
     mesh.castShadow = mesh.receiveShadow = true;
-    const box = new THREE.Box3().setFromCenterAndSize(mesh.position, axis === 'x' ? new THREE.Vector3(len, h - y0, WALL) : new THREE.Vector3(WALL, h - y0, len));
+    const box = new THREE.Box3().setFromCenterAndSize(mesh.position, axis === 'x' ? new THREE.Vector3(len, h - y0, depth) : new THREE.Vector3(depth, h - y0, len));
     ctx.addOccluder(box);
     if (y0 < 1.8) {
-      if (axis === 'x') ctx.addCollider({ minX: a, maxX: b, minZ: at - WALL / 2, maxZ: at + WALL / 2 });
-      else ctx.addCollider({ minX: at - WALL / 2, maxX: at + WALL / 2, minZ: a, maxZ: b });
+      if (axis === 'x') ctx.addCollider({ minX: a, maxX: b, minZ: at - depth / 2, maxZ: at + depth / 2 });
+      else ctx.addCollider({ minX: at - depth / 2, maxX: at + depth / 2, minZ: a, maxZ: b });
     }
     ctx.addStatic(mesh);
   }
@@ -152,19 +154,40 @@ export function buildShell(ctx: WorldContext, getVisitor: () => { x: number; z: 
   wallAlongX(BUILDING.maxZ, 10, 34, zI);
   // Inner walls with doorways.
   wallAlongZ(-10, -16, 0, zD);
-  wallAlongZ(-10, 0, 16, zE, [{ a: toMed.z - toMed.width / 2, b: toMed.z + toMed.width / 2, top: 3.1 }]);
+  wallAlongZ(-10, 0, 16, zE, [{ a: toMed.z - toMed.width / 2, b: toMed.z + toMed.width / 2, top: toMed.top }]);
   wallAlongZ(10, -16, 0, zI);
-  wallAlongZ(10, 0, 16, zI, [{ a: toInd.z - toInd.width / 2, b: toInd.z + toInd.width / 2, top: 3.1 }]);
-  wallAlongX(0, -10, 10, zE, [{ a: toDes.x - toDes.width / 2, b: toDes.x + toDes.width / 2, top: 3.6 }]);
+  wallAlongZ(10, 0, 16, zI, [{ a: toInd.z - toInd.width / 2, b: toInd.z + toInd.width / 2, top: toInd.top }]);
+  wallAlongX(0, -10, 10, zE, [{ a: toDes.x - toDes.width / 2, b: toDes.x + toDes.width / 2, top: toDes.top }]);
 
   // ---------------------------------------------------------------- lobby facade (z = 16)
   const fz = BUILDING.maxZ;
   const front = open('front');
-  const glassTop = 4.3;
-  const doorTop = 2.8;
-  segment(-10 - WALL / 2, -7, fz, zE, 'x', m.wallDark);
-  segment(7, 10 + WALL / 2, fz, zE, 'x', m.wallDark);
-  segment(-7, 7, fz, zE, 'x', m.wallDark, glassTop); // band above the glass (sign lives here)
+  const glassTop = FACADE_GLASS.top;
+  const doorTop = front.top;
+  const gx0 = FACADE_GLASS.x0;
+  const gx1 = FACADE_GLASS.x1;
+  // The charcoal frame of the glass box stands 1 cm proud of the wing facades and of the
+  // lobby's side walls (front and ends): no two different walls share a plane at the corners
+  // (they z-fought there), and the step reads as a deliberate reveal.
+  const PROUD = 0.01;
+  const frameD = WALL + PROUD;
+  const frameZ = fz + PROUD / 2;
+  segment(-10 - WALL / 2 - PROUD, gx0, frameZ, zE, 'x', m.wallDark, 0, frameD);
+  segment(gx1, 10 + WALL / 2 + PROUD, frameZ, zE, 'x', m.wallDark, 0, frameD);
+  segment(gx0, gx1, frameZ, zE, 'x', m.wallDark, glassTop, frameD); // band above the glass (sign lives here)
+  // Charcoal is the outside colour: inside, the frame is lined like the lobby's other walls
+  // (above the skirting).
+  const liningZ = fz - WALL / 2 - 0.004;
+  for (const [x0, x1, y0] of [
+    [-10 + WALL / 2, gx0, 0.08],
+    [gx1, 10 - WALL / 2, 0.08],
+    [gx0, gx1, glassTop],
+  ]) {
+    const lin = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, zE - 0.001 - y0, 0.008), m.wall);
+    lin.position.set((x0 + x1) / 2, (y0 + zE - 0.001) / 2, liningZ);
+    lin.receiveShadow = true;
+    ctx.addStatic(lin);
+  }
   const glassPane = (x0: number, x1: number, y0: number, y1: number) => {
     const p = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, 0.03), m.glass);
     p.position.set((x0 + x1) / 2, (y0 + y1) / 2, fz);
@@ -172,22 +195,22 @@ export function buildShell(ctx: WorldContext, getVisitor: () => { x: number; z: 
   };
   const dx0 = front.x - front.width / 2;
   const dx1 = front.x + front.width / 2;
-  glassPane(-7, dx0, 0, glassTop);
-  glassPane(dx1, 7, 0, glassTop);
+  glassPane(gx0, dx0, 0, glassTop);
+  glassPane(dx1, gx1, 0, glassTop);
   glassPane(dx0, dx1, doorTop + 0.22, glassTop);
-  ctx.addCollider({ minX: -7, maxX: dx0, minZ: fz - 0.15, maxZ: fz + 0.15 });
-  ctx.addCollider({ minX: dx1, maxX: 7, minZ: fz - 0.15, maxZ: fz + 0.15 });
+  ctx.addCollider({ minX: gx0, maxX: dx0, minZ: fz - 0.15, maxZ: fz + 0.15 });
+  ctx.addCollider({ minX: dx1, maxX: gx1, minZ: fz - 0.15, maxZ: fz + 0.15 });
   // Mullions and a transom.
   const mull = m.metalDark;
-  for (const x of [-7, -5.6, -4.2, -2.8, dx0, dx1, 2.8, 4.2, 5.6, 7]) {
+  for (const x of [gx0, -5.6, -4.2, -2.8, dx0, dx1, 2.8, 4.2, 5.6, gx1]) {
     const bar = new THREE.Mesh(new THREE.BoxGeometry(0.07, glassTop, 0.12), mull);
     bar.position.set(x, glassTop / 2, fz);
     bar.castShadow = true;
     ctx.addStatic(bar);
   }
   for (const [x0, x1] of [
-    [-7, dx0],
-    [dx1, 7],
+    [gx0, dx0],
+    [dx1, gx1],
   ]) {
     const t = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.07, 0.12), mull);
     t.position.set((x0 + x1) / 2, doorTop + 0.11, fz);
@@ -195,33 +218,68 @@ export function buildShell(ctx: WorldContext, getVisitor: () => { x: number; z: 
   }
   slidingDoors(ctx, { x: front.x, z: fz, width: front.width, height: doorTop }, getVisitor);
 
-  // Canopy over the entrance.
+  // Canopy over the entrance, hung from the band above the glass by two tie rods: each runs
+  // from a wall bracket (y 4.45 on the frame face) down to a clevis on the canopy's outer edge.
+  const canopyTop = 3.25 + 0.07;
+  const canopyEdge = fz + 2.2;
   const canopy = new THREE.Mesh(new THREE.BoxGeometry(6, 0.14, 2.2), m.light);
   canopy.position.set(0, 3.25, fz + 1.1);
   canopy.castShadow = true;
   ctx.addStatic(canopy);
+  const wallFace = fz + WALL / 2 + PROUD;
+  const rodTop = new THREE.Vector3(0, 4.45, wallFace);
+  const rodEnd = new THREE.Vector3(0, canopyTop, canopyEdge - 0.1);
+  const rodLen = rodTop.distanceTo(rodEnd);
+  const rodTilt = Math.atan2(rodTop.z - rodEnd.z, rodTop.y - rodEnd.y); // about X, from +Y
   for (const x of [-2.9, 2.9]) {
-    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.4), m.metal);
-    rod.position.set(x, 3.95, fz + 1.4);
-    rod.rotation.x = -0.9;
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, rodLen, 8), m.metal);
+    rod.position.set(x, (rodTop.y + rodEnd.y) / 2, (rodTop.z + rodEnd.z) / 2);
+    rod.rotation.x = rodTilt;
+    rod.castShadow = true;
     ctx.addStatic(rod);
+    // Wall plate and a clevis block on the canopy.
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.02), m.metal);
+    plate.position.set(x, rodTop.y, wallFace + 0.01);
+    ctx.addStatic(plate);
+    const clevis = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.08), m.metal);
+    clevis.position.set(x, canopyTop + 0.025, rodEnd.z);
+    ctx.addStatic(clevis);
   }
 
   // ---------------------------------------------------------------- brand on the facade
   // Big solid sign above the entrance → corporate site.
-  ctx.logo({ diameter: 1.35, style: 'solid', depth: 0.12 }, { x: 0, y: (glassTop + zE) / 2, z: fz + WALL / 2 + 0.12 });
+  ctx.logo({ diameter: 1.35, style: 'solid', depth: 0.12 }, { x: 0, y: (glassTop + zE) / 2, z: wallFace + 0.12 });
   // Division signs on the wing facades.
   ctx.logo({ diameter: 1.1, style: 'solid', depth: 0.1, division: 'medicale' }, { x: -22, y: 2.2, z: fz + WALL / 2 + 0.1 });
   ctx.logo({ diameter: 1.6, style: 'solid', depth: 0.12, division: 'industriale' }, { x: 22, y: 4.6, z: fz + WALL / 2 + 0.12 });
-  // Thin reveal lines along the wing facades.
+  // Thin reveal lines along the wing facades, from the building corner to the lobby's frame.
   for (const [x0, x1, y] of [
-    [-34, -10, 3.2],
-    [10, 34, 6.8],
-    [10, 34, 2.8],
+    [-34 - WALL / 2, -10 - WALL / 2 - PROUD, 3.2],
+    [10 + WALL / 2 + PROUD, 34 + WALL / 2, 6.8],
+    [10 + WALL / 2 + PROUD, 34 + WALL / 2, 2.8],
   ]) {
-    const r = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + WALL, 0.05, 0.04), m.trim);
+    const r = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.05, 0.04), m.trim);
     r.position.set((x0 + x1) / 2, y, fz + WALL / 2 + 0.02);
     ctx.addStatic(r);
+  }
+  // Wing facades: a charcoal plinth band and vertical panel joints every 1.2 m, so the long
+  // light walls read as clad panels rather than blank planes.
+  const face = fz + WALL / 2;
+  const plinthH = 0.6;
+  for (const [x0, x1, h] of [
+    [-34 - WALL / 2, -10 - WALL / 2 - PROUD, zM],
+    [10 + WALL / 2 + PROUD, 34 + WALL / 2, zI],
+  ]) {
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, plinthH, 0.03), m.wallDark);
+    plinth.position.set((x0 + x1) / 2, plinthH / 2, face + 0.015);
+    plinth.receiveShadow = true;
+    ctx.addStatic(plinth);
+    const jointGeo = new THREE.BoxGeometry(0.018, h - plinthH, 0.008);
+    for (let x = Math.ceil((x0 + 0.3) / 1.2) * 1.2; x < x1 - 0.3; x += 1.2) {
+      const j = new THREE.Mesh(jointGeo, m.trim);
+      j.position.set(x, plinthH + (h - plinthH) / 2, face + 0.004);
+      ctx.addStatic(j);
+    }
   }
 
   // Plaza totem: a slim slab with the logo on both faces.
