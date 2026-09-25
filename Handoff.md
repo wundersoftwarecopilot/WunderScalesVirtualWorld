@@ -13,10 +13,9 @@ built procedurally (10 medicale, 10 industriale, 10 design) in a minimal grey bu
 lobby, clinic wing, supermarket/warehouse wing, design gallery. The owner writes in Italian.
 
 Hard rules (details in `CLAUDE.md`): no text anywhere (DOM or world, 7-segment digits allowed; the
-only exception is the owner's bilingual watermarks in the HUD: "click to control the camera" before
-the lock, "press ESC to release the mouse" during it), no
-image/font/model files, greys for the environment, logos only from `src/brand/logo.ts` and always
-clickable, table-top scales on pedestals.
+only exception is the owner's two bilingual watermarks in the HUD), no image/font/model files, greys
+for the environment, logos only from `src/brand/logo.ts` and always clickable, table-top scales on
+pedestals.
 
 ## Commands
 
@@ -27,7 +26,7 @@ npm run typecheck                          # tsc --noEmit
 npm test                                   # vitest (tests/unit)
 npx vitest run tests/unit/zoom.test.ts     # a single unit test file
 npm run build                              # tsc + vite build + scripts/make-artifact.mjs → artifact/wunder-world.html
-npm run e2e                                # Playwright against artifact/wunder-world.html (build first!)
+npm run e2e                                # rebuilds (pree2e), then Playwright on artifact/wunder-world.html
 npx playwright test -g "pointer locked"    # a single e2e test by name
 npm run pages                              # build + scripts/make-pages.mjs → site/index.html (GitHub Pages)
 node scripts/shots.mjs --port 5173 world lobby medicale   # screenshots + render stats (see script header)
@@ -36,9 +35,12 @@ node scripts/shots.mjs --port 5173 sweep --step 4          # worst draw-call/tri
 ```
 
 - e2e and screenshots use the preinstalled Chromium (`/opt/pw-browsers`, Playwright 1.56.1 pinned to
-  match) with SwiftShader, so frames are slow: tests wait on `window.__wunder.frames` or on state,
-  never on wall-clock time. The e2e fixture serves the artifact at a fake https origin and answers
-  the jsdelivr three.js requests from `node_modules` (the container cannot reach the CDN).
+  match) with SwiftShader, so frames are slow: the 10 e2e tests take about 7 minutes (run them in the
+  background), a screenshot can take a minute (pass a long `timeout`), and tests wait on
+  `window.__wunder.frames` or on state, never on wall-clock time. A direct `npx playwright test`
+  does not rebuild: run `npm run build` first. The e2e fixture serves the artifact at a fake https
+  origin and answers the jsdelivr three.js requests from `node_modules` (the container cannot reach
+  the CDN).
 - Parallel dev servers: give each its own `VITE_CACHE_DIR=node_modules/.vite-<port>`. `ss` is not
   installed; find server PIDs via `/proc`. Never `pkill -f` a pattern that also appears in your own
   command line (it kills your shell).
@@ -83,10 +85,8 @@ logo gets a transparent real `<a target=_blank>` positioned over its projected b
 With the pointer locked the layer is hidden, the logo under the crosshair is `aimed` (it glows) and a
 click calls `links.open()` (`anchor.click()` inside the trusted click, after releasing the lock).
 
-**Input model (`src/core/input.ts`, `player.ts`, `ui/hud.ts`)**: a mouse click on the canvas requests
-pointer lock (first-person look; Esc releases). `ui/watermark.ts` draws two bilingual watermarks
-top right that cross-fade: "click to control the camera…" while the HUD mouse icon shows (a mouse,
-unlocked, lock available), "press ESC to release the mouse" while locked. One request at a time; each is judged 1 s later by
+**Input model (`src/core/input.ts`, `player.ts`)**: a mouse click on the canvas requests pointer
+lock (first-person look; Esc releases). One request at a time; each is judged 1 s later by
 its outcome (a lock that lands clears any verdict), and two refusals outside the post-Esc cooldown
 fall back to drag-to-look (sandboxed frames). The first mouse move after the lock and warp spikes
 are dropped; a locked click within 400 ms of the lock (the rest of a double-click) opens nothing.
@@ -94,10 +94,19 @@ The wheel zooms 1–4× (eased, look sensitivity divided by zoom, middle button 
 opening a link); Safari's trackpad pinch arrives as `gesture*` events. Arrows/WASD only walk
 (←/→ strafe), Shift runs. Touch: one-finger drag looks, two-finger pinch zooms, the WebGL HUD arrows
 walk (a press on an arrow swallows the click of any link under it); a finger while the mouse is
-locked releases the lock. Nothing looks, zooms or locks before `input.enabled` (world ready). The
-HUD hints follow `input.pointerType` (the pointer in use: mouse icon or touch hint), not device
-sniffing, so touch laptops get both. Base FOV depends on aspect
-(`fovFor` in main.ts, wider on portrait phones); the player applies the zoom on top via `setBaseFov`.
+locked releases the lock. Nothing looks, zooms or locks before `input.enabled` (world ready). Base
+FOV depends on aspect (`fovFor` in main.ts, wider on portrait phones); the player applies the zoom
+on top via `setBaseFov`.
+
+**HUD (`src/ui/`)**: `hud.ts` is a second scene drawn after the world with an orthographic camera
+in CSS pixels (origin bottom-left): loader, arrow pad (its `hit()` is the input's HUD hit test),
+crosshair and aim ring, and the hints, which follow `input.pointerType` (the pointer in use), not
+device sniffing, so touch laptops get both: mouse icon or touch hint. `watermark.ts` draws the two
+bilingual watermarks top right into CanvasTextures at the renderer's pixel ratio
+(`hud.resize(w, h, pixelRatio)`, redrawn when it changes); they cross-fade: "click to control the
+camera…" while the mouse icon shows (a mouse, unlocked, lock available), "press ESC to release the
+mouse" while locked. `keysign.ts` builds the in-world key sign; its mouse turns into a phone for
+touch visitors.
 
 **Culling and visibility**: `world/portals.ts` sorts everything into rooms (star plan: plaza ↔ lobby
 via the glass front, lobby ↔ each wing via its doorway; `ctx.addSubRoom` for the warehouse behind a
@@ -112,7 +121,8 @@ context restore, because three.js otherwise overrides `envMapIntensity` with the
 ## Debugging hooks
 
 - `window.__wunder`: `ready`, `frames`, `player` (`teleport(x, z, yaw, pitch)`, `zoom`), `input`
-  (`locked`, `setIntent`), `links` (`links`, `aimed`), `hud`, `scene`, `scales` (placed instances),
+  (`locked`, `lockUnavailable`, `pointerType`, `setIntent`), `links` (`links`, `aimed`), `hud`
+  (`clickHintShown`, `escHintShown`, `center(intent)`), `scene`, `scales` (placed instances),
   `teleport(<viewpoint>)`, `stats()` (calls, triangles, culled). Named viewpoints: `VIEWPOINTS` in
   `world/layout.ts` (also `?view=<name>` in dev). Yaw 0 looks north (−Z), +π/2 west.
 - `lab.html?scale=<id>&angle=..&elev=..&zoom=..&fy=..&weigh=1`, `lab.html?all=<line>`; `window.__lab.errors`
@@ -130,9 +140,12 @@ context restore, because three.js otherwise overrides `envMapIntensity` with the
   lock (after refusing `unadjustedMovement` on Linux), and the e2e suite uses it; only the mouse-delta
   test fakes the lock, because CDP mouse moves carry no movementX/Y while locked. Safari's
   `gesture*` pinch was only checked with emulated events. Real GPU/phone checks are still open.
-- `npm run e2e` rebuilds the artifact first (`pree2e`): the fixture loads `artifact/wunder-world.html`.
 - The mouse-look change (3295b08) went through a review from three angles (browsers, touch,
   regressions); the commit after it fixes all 21 findings, and the e2e suite covers the real lock,
   a sandboxed frame without lock permission, and phone look/pinch/walk. Still unchecked outside
   Chromium: touch laptops in Firefox/Safari; the locked mouse filter drops any single move larger
   than max(300 px, 40% of the viewport).
+- Watermark wording: the ESC lines are the owner's; "Click to control the camera with the mouse" is
+  adapted from their "Click to use the mouse as control camera", and the Italian mirrors "Premere
+  ESC…" with "Cliccare…". The owner has not confirmed that wording yet. Change it only in
+  `watermark.ts` and in the `CLAUDE.md` rule.
