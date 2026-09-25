@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createLogo } from '../brand/logo';
 import type { HudHitTester, Input, Intent } from '../core/input';
 import { arrowGeometry } from './keysign';
-import { EscWatermark } from './watermark';
+import { CLICK_LINES, ESC_LINES, Watermark } from './watermark';
 
 /**
  * Screen-space overlay drawn with WebGL (orthographic camera in CSS pixels, origin bottom-left):
@@ -15,8 +15,9 @@ import { EscWatermark } from './watermark';
  * - with a finger: a small touch hint, a fingertip swiping sideways ("drag to look around") until
  *   the visitor first turns, then two fingertips spreading ("pinch to zoom") until they first zoom.
  *   The hints follow the pointer in use (`input.pointerType`), so a touch laptop gets the right one;
- * - while the mouse is locked: a see-through watermark top right, "press ESC to release the
- *   mouse" in English and Italian (the only text, asked for by the owner: `watermark.ts`);
+ * - see-through watermarks top right in English and Italian (the only text, asked for by the
+ *   owner: `watermark.ts`): "click to control the camera with the mouse" while the mouse icon
+ *   shows, "press ESC to release the mouse" while the mouse is locked;
  * - the loading screen (spinning logo + progress ring) while the world is built.
  */
 function roundedRect(w: number, h: number, r: number, hole?: number): THREE.Shape {
@@ -86,8 +87,8 @@ export class Hud implements HudHitTester {
   private readonly swipeChevrons: THREE.Object3D;
   private readonly pinchFingers: [THREE.Object3D, THREE.Object3D];
   private readonly touchMats: Array<{ m: THREE.MeshBasicMaterial; o: number }> = [];
-  private readonly escHint = new EscWatermark();
-  private escOpacity = 0;
+  private readonly clickHint = new Watermark(CLICK_LINES);
+  private readonly escHint = new Watermark(ESC_LINES);
 
   constructor(private readonly input: Input) {
     this.touch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -239,7 +240,7 @@ export class Hud implements HudHitTester {
     this.touchHint.add(plate, plateRing, this.swipeChevrons, this.swipeFinger, ...this.pinchFingers);
     this.touchHint.visible = false;
     this.scene.add(this.touchHint);
-    this.scene.add(this.escHint.mesh);
+    this.scene.add(this.clickHint.mesh, this.escHint.mesh);
     input.hud = this;
   }
 
@@ -264,10 +265,12 @@ export class Hud implements HudHitTester {
       b.group.scale.setScalar(size);
     }
     this.crosshair.position.set(w / 2, h / 2, 0);
-    // Watermark in the top-right corner, on whole pixels so the text stays sharp.
-    this.escHint.draw(pixelRatio);
+    // Watermarks in the top-right corner, on whole pixels so the text stays sharp.
     const m = w < 480 ? 12 : 16;
-    this.escHint.mesh.position.set(Math.round(w - m - this.escHint.width) + this.escHint.width / 2, Math.round(h - m - this.escHint.height) + this.escHint.height / 2, 0);
+    for (const wm of [this.clickHint, this.escHint]) {
+      wm.draw(pixelRatio);
+      wm.mesh.position.set(Math.round(w - m - wm.width) + wm.width / 2, Math.round(h - m - wm.height) + wm.height / 2, 0);
+    }
     // Mouse icon (or touch hint) to the right of the arrow pad, centred on its height.
     const padRight = baseX + (size + gap) + size / 2;
     this.mouseIcon.position.set(padRight + 24, baseY + (size + gap) / 2, 0);
@@ -292,7 +295,11 @@ export class Hud implements HudHitTester {
     return null;
   }
 
-  /** The ESC watermark is on screen (tests). */
+  /** The watermarks on screen (tests): "click to control the camera…", "press ESC…". */
+  get clickHintShown(): boolean {
+    return this.clickHint.mesh.visible;
+  }
+
   get escHintShown(): boolean {
     return this.escHint.mesh.visible;
   }
@@ -314,12 +321,9 @@ export class Hud implements HudHitTester {
     this.mouseIcon.visible = !this.loading && mouse && !inp.locked && !inp.lockUnavailable;
     const needLook = inp.lastLookAt === 0;
     this.touchHint.visible = !this.loading && !mouse && (needLook || inp.lastZoomAt === 0);
-    // The watermark fades in with the lock and out when the mouse is free again.
-    const escTarget = !this.loading && inp.locked ? 0.72 : 0;
-    this.escOpacity += (escTarget - this.escOpacity) * Math.min(1, dt * 6);
-    if (escTarget === 0 && this.escOpacity < 0.01) this.escOpacity = 0;
-    this.escHint.mesh.material.opacity = this.escOpacity;
-    this.escHint.mesh.visible = this.escOpacity > 0;
+    // The watermarks cross-fade: "click…" with the mouse icon, "press ESC…" with the lock.
+    this.clickHint.fade(this.mouseIcon.visible ? 0.72 : 0, dt);
+    this.escHint.fade(!this.loading && inp.locked ? 0.72 : 0, dt);
     if (this.loading) {
       this.loaderLogo.rotation.y = Math.sin(t * 1.4) * 0.5;
       const p = THREE.MathUtils.clamp(this.progress, 0, 1);

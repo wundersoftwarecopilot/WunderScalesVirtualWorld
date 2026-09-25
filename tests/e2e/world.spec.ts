@@ -251,13 +251,15 @@ test('a click on the bare world really locks the pointer; a hidden logo link tak
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at.x, y: at.y, button: 'left', buttons: 0, clickCount: count });
   };
   await page.mouse.move(at.x, at.y);
+  // Before the click the watermark says how to take the camera with the mouse.
+  await page.waitForFunction(() => window.__wunder!.hud.clickHintShown, null, { timeout: 60_000 });
   expect(await page.evaluate(() => window.__wunder!.hud.escHintShown)).toBe(false);
   await click(1);
   await click(2);
   await page.waitForFunction(() => window.__wunder!.input.locked && document.pointerLockElement?.id === 'gl', null, { timeout: 30_000 });
-  // The crosshair replaces the cursor: the links step aside, and the ESC watermark shows.
+  // The crosshair replaces the cursor: the links step aside, and the watermark switches to ESC.
   await page.waitForFunction(() => document.getElementById('links')!.hidden, null, { timeout: 60_000 });
-  await page.waitForFunction(() => window.__wunder!.hud.escHintShown, null, { timeout: 60_000 });
+  await page.waitForFunction(() => window.__wunder!.hud.escHintShown && !window.__wunder!.hud.clickHintShown, null, { timeout: 60_000 });
   await page.waitForTimeout(1500); // past the moment a lock request is judged
   expect(await page.evaluate(() => window.__wunder!.input.lockUnavailable)).toBe(false);
   expect(popups).toEqual([]);
@@ -267,7 +269,7 @@ test('a click on the bare world really locks the pointer; a hidden logo link tak
   await page.waitForFunction(() => !window.__wunder!.input.locked && !document.getElementById('links')!.hidden && window.__wunder!.links.aimed === null, null, {
     timeout: 60_000,
   });
-  await page.waitForFunction(() => !window.__wunder!.hud.escHintShown, null, { timeout: 60_000 });
+  await page.waitForFunction(() => !window.__wunder!.hud.escHintShown && window.__wunder!.hud.clickHintShown, null, { timeout: 60_000 });
   await page.waitForTimeout(1600);
   await page.mouse.click(at.x, at.y);
   await page.waitForFunction(() => window.__wunder!.input.locked, null, { timeout: 30_000 });
@@ -304,6 +306,8 @@ test('in a frame without pointer-lock permission, the view still turns by draggi
   await frame.waitForFunction(() => window.__wunder!.input.lockUnavailable, null, { timeout: 30_000 });
   expect(await frame.evaluate(() => window.__wunder!.input.locked)).toBe(false);
   await frame.waitForFunction(() => !(window.__wunder!.hud as unknown as { mouseIcon: { visible: boolean } }).mouseIcon.visible, null, { timeout: 60_000 });
+  // ...and the "click to control the camera" watermark with it (a click would do nothing).
+  await frame.waitForFunction(() => !window.__wunder!.hud.clickHintShown, null, { timeout: 60_000 });
   // Dragging turns the view.
   const yaw0 = await frame.evaluate(() => window.__wunder!.player.yaw);
   await page.mouse.down();
@@ -418,7 +422,15 @@ test.describe('on a phone', () => {
       page.evaluate(() => {
         const w = window.__wunder!;
         const hud = w.hud as unknown as { touchHint: { visible: boolean }; mouseIcon: { visible: boolean } };
-        return { yaw: w.player.yaw, x: w.player.x, z: w.player.z, zt: w.player.zoomTarget, hint: hud.touchHint.visible, mouse: hud.mouseIcon.visible };
+        return {
+          yaw: w.player.yaw,
+          x: w.player.x,
+          z: w.player.z,
+          zt: w.player.zoomTarget,
+          hint: hud.touchHint.visible,
+          mouse: hud.mouseIcon.visible,
+          watermark: w.hud.clickHintShown || w.hud.escHintShown,
+        };
       });
     await page.evaluate(() => window.__wunder!.player.teleport(0, 11.5, 0, 0));
     await frames(page, 2);
@@ -426,6 +438,7 @@ test.describe('on a phone', () => {
     const s0 = await state();
     expect(s0.hint).toBe(true);
     expect(s0.mouse).toBe(false);
+    expect(s0.watermark).toBe(false);
     const cx = 195;
     const cy = 320;
 
