@@ -27,6 +27,9 @@ Published as a claude.ai Artifact (`artifact/wunder-world.html`).
   zoom 1–4×, middle button resets; arrows/WASD only walk and strafe; touch: drag looks, pinch zooms,
   HUD arrows walk), player, collisions, link layer (while locked the logo in the crosshair opens
   on click). Nothing looks, zooms or locks before `input.enabled` (world ready).
+- `src/ui/` the WebGL HUD (`hud.ts`: second scene, orthographic camera in CSS pixels: loader, arrow
+  pad, crosshair, mouse/touch hints, `watermark.ts` watermarks) and the in-world key sign (`keysign.ts`).
+- `src/brand/` `logo.ts`, `urls.ts` (link targets and the links' aria-labels), `colors.ts` (brand colours).
 - `src/world/layout.ts` floor plan (X east, Z south, metres); `building.ts` shell; `zones/*.ts` dressing.
 - `src/scales/specs.ts` the 30 models (ids, placement, URLs, approximate sizes); one file per model
   under `scales/{medicale,industriale,design}/<id>.ts` (default export: one ScaleDef or an array);
