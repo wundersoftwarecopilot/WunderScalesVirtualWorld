@@ -49,9 +49,15 @@ test('the world boots, renders, and shows no text', async ({ page }) => {
   const shot = await page.screenshot();
   expect(shot.byteLength).toBeGreaterThan(20_000);
 
-  const scales = await page.evaluate(() => window.__wunder!.scales.map((s) => ({ id: s.spec.id, line: s.spec.line, placement: s.spec.placement })));
-  expect(scales).toHaveLength(30);
-  for (const line of ['medicale', 'industriale', 'design']) expect(scales.filter((s) => s.line === line)).toHaveLength(10);
+  const scales = await page.evaluate(() =>
+    window.__wunder!.scales.map((s) => ({ id: s.spec.id, line: s.spec.line, copy: s.copy, x: s.slot.x, z: s.slot.z })),
+  );
+  const catalogue = scales.filter((s) => !s.copy);
+  expect(catalogue).toHaveLength(30);
+  for (const line of ['medicale', 'industriale', 'design']) expect(catalogue.filter((s) => s.line === line)).toHaveLength(10);
+  // The first consulting room (AMB 1: x −15.1..−10.15, z 10.3..15.85) has its own column scale.
+  const amb1 = scales.filter((s) => s.copy && s.x > -15.1 && s.x < -10.15 && s.z > 10.3 && s.z < 15.85);
+  expect(amb1.map((s) => s.id)).toEqual(['c202']);
 
   expect(errors.filter((e) => !benign(e))).toEqual([]);
 });
@@ -110,10 +116,16 @@ test('walking onto a floor scale starts a weighing', async ({ page }) => {
   const errors: string[] = [];
   await openArtifact(page, errors);
   await page.locator('#gl').focus();
-  // A medicale column scale (the platform is partly under its column) and the gallery hero.
-  for (const id of ['r2020', 'r150-gold']) {
-    const start = await page.evaluate((id) => {
-      const s = window.__wunder!.scales.find((p) => p.spec.id === id);
+  // A medicale column scale (the platform is partly under its column), the gallery hero and the
+  // first consulting room's own C202 (a copy, reached between the sink and the couch bay).
+  const targets = await page.evaluate(() => {
+    const all = window.__wunder!.scales;
+    return [all.findIndex((p) => p.spec.id === 'r2020'), all.findIndex((p) => p.spec.id === 'r150-gold'), all.findIndex((p) => p.copy && p.spec.id === 'c202')];
+  });
+  for (const i of targets) {
+    expect(i).toBeGreaterThanOrEqual(0);
+    const start = await page.evaluate((i) => {
+      const s = window.__wunder!.scales[i];
       const so = s?.instance.standOn;
       if (!s || !so || s.spec.placement !== 'floor') return null;
       // Platform centre (local → world), then 1 m out in front of the platform's front edge,
@@ -124,18 +136,18 @@ test('walking onto a floor scale starts a weighing', async ({ page }) => {
       const cz = s.slot.z - so.x * n + so.z * c;
       const out = so.d / 2 + 1.0;
       return { x: cx + n * out, z: cz + c * out, yaw: s.slot.rotY };
-    }, id);
-    expect(start, id).not.toBeNull();
+    }, i);
+    expect(start, `scale #${i}`).not.toBeNull();
     await page.evaluate((s) => window.__wunder!.player.teleport(s!.x, s!.z, s!.yaw), start);
     const f0 = await page.evaluate(() => window.__wunder!.frames);
     await page.waitForFunction((f) => window.__wunder!.frames > f + 2, f0, { timeout: 60_000 });
-    expect(await page.evaluate((id) => window.__wunder!.scales.find((p) => p.spec.id === id)!.active, id), id).toBe(false);
+    expect(await page.evaluate((i) => window.__wunder!.scales[i].active, i), `scale #${i}`).toBe(false);
     // Walk forward until the platform weighs the visitor: a collider in the way would stop them
     // short of it and time out here.
     await page.keyboard.down('ArrowUp');
     await page.waitForFunction(
-      (id) => window.__wunder!.scales.find((p) => p.spec.id === id)!.active && window.__wunder!.player.floorTarget > 0,
-      id,
+      (i) => window.__wunder!.scales[i].active && window.__wunder!.player.floorTarget > 0,
+      i,
       { timeout: 90_000 },
     );
     await page.keyboard.up('ArrowUp');

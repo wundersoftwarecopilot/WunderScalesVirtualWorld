@@ -49,7 +49,9 @@ Published as a claude.ai Artifact (`artifact/wunder-world.html`).
 
 ## Zone contract (`world/zone.ts`)
 - A zone module builds props inside `shell.inner`, keeps `openings[].clear` free, and returns
-  `slots` (world x/z/rotY) for its line's scale ids. Use `ctx.addStatic` for plain props (merged
+  `slots` (world x/z/rotY) for its line's scale ids, plus optional `extras`: further copies of a
+  model that dress a room (AMB 1's own C202), built, linked and weighed like the catalogue piece
+  and marked `copy` in `__wunder.scales`. Use `ctx.addStatic` for plain props (merged
   per material), `ctx.instanced` for repeats, `ctx.addSolid/addCollider` for collisions,
   `ctx.addOccluder` for tall things, `ctx.logo/painting` for clickable brand pieces.
 

@@ -23,9 +23,20 @@ export interface ZoneInput {
   openings: Opening[];
 }
 
+/** A further copy of a catalogue model, standing at `slot`. */
+export interface ExtraScale {
+  id: ScaleId;
+  slot: Slot;
+}
+
 export interface ZoneOutput {
   /** Positions for this zone's scales (see SPECS for sizes and placement). */
   slots: Partial<Record<ScaleId, Slot>>;
+  /**
+   * Further copies of catalogue models that dress a room (a consulting room's own column scale).
+   * Built, linked and weighed like the catalogue piece, which keeps its place in `slots`.
+   */
+  extras?: ExtraScale[];
 }
 
 export interface ZoneModule {

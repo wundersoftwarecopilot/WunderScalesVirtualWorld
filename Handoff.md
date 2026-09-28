@@ -67,7 +67,8 @@ yields a frame between steps so the WebGL loader animates) → key signs → `ct
 `links.update()`.
 
 **World assembly (`src/world/index.ts`)**: `buildShell` (floors, walls with doorways, roofs, facade,
-doors, facade signs) → each zone module returns `slots` → `loadCatalog()` builds every scale →
+doors, facade signs) → each zone module returns `slots` (and optional `extras`, further copies of a
+model placed after the catalogue, `copy: true`) → `loadCatalog()` builds every scale →
 `mergeModel()` merges a model's static parts per material (anything that moves must be under
 `kit.keep()`, or it is frozen into the merge) → pedestals sized by `pedestalSize()` for
 `placement: 'pedestal'` → every `userData.scaleLogo` badge is registered as a link to the product

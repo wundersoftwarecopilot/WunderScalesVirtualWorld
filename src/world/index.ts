@@ -2,13 +2,13 @@ import * as THREE from 'three';
 import { localRectToWorld, worldToLocalXZ } from '../core/rect';
 import { loadCatalog } from '../scales/catalog';
 import type { Line, ScaleId, ScaleSpec } from '../scales/specs';
-import type { ScaleInstance } from '../scales/types';
+import type { ScaleDef, ScaleInstance } from '../scales/types';
 import { mergeModel } from './batch';
 import { buildShell } from './building';
 import type { WorldContext } from './context';
 import { OPENINGS, ZONES, type ZoneId } from './layout';
 import { createPedestal, pedestalSize } from './pedestal';
-import type { Slot, ZoneModule } from './zone';
+import type { ExtraScale, Slot, ZoneModule } from './zone';
 import entrance from './zones/entrance';
 import medicale from './zones/medicale';
 import industriale from './zones/industriale';
@@ -26,6 +26,8 @@ export interface PlacedScale {
   /** World y of the scale's origin (pedestal top for table pieces). */
   baseY: number;
   active: boolean;
+  /** A further copy dressing a room (ZoneOutput.extras), not the catalogue piece. */
+  copy: boolean;
 }
 
 export interface Visitor {
@@ -47,6 +49,7 @@ export async function buildWorld(
   await nextFrame();
 
   const slots: Partial<Record<ScaleId, Slot>> = {};
+  const extras: ExtraScale[] = [];
   let step = 0;
   for (const mod of ZONE_MODULES) {
     const shell = ZONES[mod.id];
@@ -57,6 +60,7 @@ export async function buildWorld(
     try {
       const out = mod.build({ ctx, shell, openings });
       Object.assign(slots, out.slots);
+      extras.push(...(out.extras ?? []));
     } catch (err) {
       console.error(`[world] zone ${mod.id} failed to build`, err);
     }
@@ -66,18 +70,17 @@ export async function buildWorld(
 
   const placed: PlacedScale[] = [];
   const defs = loadCatalog();
-  let n = 0;
-  for (const def of defs) {
+
+  /** Builds one model at `slot` (pedestal, links, colliders) and registers it for weighing. */
+  const place = (def: ScaleDef, slot: Slot, copy: boolean): void => {
     const spec = def.spec;
     let instance: ScaleInstance;
     try {
       instance = def.build();
     } catch (err) {
       console.error(`[world] scale ${spec.id} failed to build`, err);
-      n++;
-      continue;
+      return;
     }
-    const slot = slots[spec.id] ?? fallbackSlot(spec, n);
     const root = instance.root;
     mergeModel(root);
     let baseY = 0;
@@ -114,13 +117,21 @@ export async function buildWorld(
       for (const c of solids) ctx.addCollider(localRectToWorld(c, slot.x, slot.z, slot.rotY), 'scale');
     }
 
-    placed.push({ spec, instance, slot, baseY, active: false });
+    placed.push({ spec, instance, slot, baseY, active: false, copy });
+  };
+
+  let n = 0;
+  for (const def of defs) {
+    place(def, slots[def.spec.id] ?? fallbackSlot(def.spec, n), false);
     n++;
     if (n % 5 === 0) {
       progress(0.4 + (n / defs.length) * 0.5);
       await nextFrame();
     }
   }
+  // Copies after the catalogue, so looking a model up by id finds the catalogue piece first
+  // (loadCatalog has a def, or a stub, for every id).
+  for (const e of extras) place(defs.find((d) => d.spec.id === e.id)!, e.slot, true);
 
   // Drive weighing: stepping onto a floor platform, or walking up to a table-top piece.
   ctx.onUpdate((dt, t) => {

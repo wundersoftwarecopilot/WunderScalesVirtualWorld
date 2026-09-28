@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { WorldContext } from '../context';
-import type { ZoneModule, Slot } from '../zone';
+import type { ExtraScale, Slot, ZoneModule, ZoneOutput } from '../zone';
 import { SCALE_IDS, type ScaleId } from '../../scales/specs';
 import {
   armchair,
@@ -73,7 +73,7 @@ import {
  *   z 5.65   ├────[opening]─────┘     └───────────────────────┬─────┤
  *            │ logo  ═══ MAIN CORRIDOR (grey band)  ═══             ← lobby
  *   z 10.3   ├──────┬──────┬────────────┬───────────┬──────────┤
- *            │ util │ util │ LAB (glazed)│ AMB 2    │ AMB 1     │
+ *            │ util │ util │ LAB (glazed)│ AMB 2    │ AMB 1 C202│
  *   z 15.85  └──────┴──────┴────────────┴───────────┴──────────┘
  *          x −33.85      −26.2       −20.05      −15.1       −10.15
  *
@@ -83,7 +83,8 @@ import {
  *   facing south, a nurse counter by the east wall. The WBA300 stands at the mouth of the N-S
  *   corridor facing east, in the sightline from the lobby doorway.
  * - Two consulting rooms (ambulatori), mirror images: couch with curtain track, desk, chairs,
- *   sink cabinet, light box, BP unit, exam lamp, frosted window.
+ *   sink cabinet, light box, BP unit, exam lamp, frosted window. AMB 1 also has its own C202
+ *   (a copy of the hub's, `extras`) in the corner by the sink.
  * - Ward off the N-S corridor: PL-VEGA in a curtained bay (3.4 × 3.9 m) with a bed-head unit,
  *   DE20 beside it, RW2.0-SEDIA with a free run-up in front of its ramp and a wheelchair.
  * - Nursery with a viewing window on the N-S corridor: bassinets behind the glass, the three
@@ -123,7 +124,7 @@ interface Gap {
 
 type V2 = [number, number];
 
-function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: number; maxZ: number }): Partial<Record<ScaleId, Slot>> {
+function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: number; maxZ: number }): ZoneOutput {
   const S = new THREE.Group(); // static parts, world coordinates
   const X0 = inner.minX;
   const X1 = inner.maxX;
@@ -270,8 +271,11 @@ function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: num
     }
   };
 
-  /** Closed door drawn on a wall face (the room behind is not modelled). */
-  const closedDoor = (n: 'N' | 'S' | 'E' | 'W', plane: number, c: number, w = 1.0, h = 2.15) => {
+  /**
+   * Closed door drawn on a wall face (the room behind is not modelled). Returns the stretch of
+   * wall its frame covers, for `finish` to leave free like a doorway.
+   */
+  const closedDoor = (n: 'N' | 'S' | 'E' | 'W', plane: number, c: number, w = 1.0, h = 2.15): V2 => {
     const g = new THREE.Group();
     const f = 0.05;
     box(g, 'grey', w + 2 * f, f, 0.014, 0, h, 0.007);
@@ -283,6 +287,7 @@ function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: num
     box(g, 'steel', 0.1, 0.3, 0.003, w / 2 - 0.12, 1.15, 0.048);
     rbox(g, 'light', 0.22, 0.22, 0.01, 0.01, 0, 1.55, 0.05);
     onFace(g, n, plane, c, 0);
+    return [c - w / 2 - f, c + w / 2 + f];
   };
 
   /**
@@ -413,24 +418,25 @@ function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: num
     fr.position.set((gWaiting.a + gWaiting.b) / 2, 0, CN);
     S.add(fr);
   }
-  closedDoor('N', CS - T / 2, -27.75, 1.0);
-  closedDoor('N', CS - T / 2, -31.85, 1.0);
-  closedDoor('S', HN + T / 2, -11.05, 1.0);
-  closedDoor('W', XE - T / 2, -11.8, 1.2);
+  // Utility rooms on the corridor, staff room off the hub, store off the N-S corridor.
+  const cdUtil = [closedDoor('N', CS - T / 2, -27.75, 1.0), closedDoor('N', CS - T / 2, -31.85, 1.0)];
+  const cdStaff = closedDoor('S', HN + T / 2, -11.05, 1.0);
+  const cdStore = closedDoor('W', XE - T / 2, -11.8, 1.2);
 
   // ---------------------------------------------------------------- wall finishes
   const d = (g: Gap): V2 => [g.a, g.b];
-  // Main corridor: dado, stripe, rails. Keep rails out of the lobby doorway's clear area.
-  finish('x', CS - T / 2, -1, X0, X1, { doors: [d(gAmb1), d(gAmb2), d(gLabDoor)], windows: [d(gLabWin)], dado: true, stripe: true, rail: true, railTo: -12.7 });
+  // Main corridor: dado, stripe, rails. Keep rails out of the lobby doorway's clear area. Closed
+  // doors count as doors: skirting, dado, stripe and rail stop at their frames.
+  finish('x', CS - T / 2, -1, X0, X1, { doors: [d(gAmb1), d(gAmb2), d(gLabDoor), ...cdUtil], windows: [d(gLabWin)], dado: true, stripe: true, rail: true, railTo: -12.7 });
   finish('x', CN + T / 2, 1, X0, XW + T / 2, { doors: [d(gWaiting)], dado: true, stripe: true, rail: true });
   finish('x', CN + T / 2, 1, STUB, X1, { dado: true, stripe: true });
   finish('z', X0, 1, CN + T / 2, CS - T / 2, { dado: true, stripe: true });
   // Hub.
   finish('x', CN - T / 2, -1, STUB, X1, { stripe: true, dado: true });
   finish('z', X1, -1, HN + T / 2, CN - T / 2, { stripe: true, dado: true });
-  finish('x', HN + T / 2, 1, XE - T / 2, X1, { stripe: true, dado: true });
+  finish('x', HN + T / 2, 1, XE - T / 2, X1, { doors: [cdStaff], stripe: true, dado: true });
   // N-S corridor.
-  finish('z', XE - T / 2, -1, Z0, HN + T / 2, { doors: [d(gNurseryDoor)], windows: [d(gNurseryWin)], dado: true, stripe: true, rail: true });
+  finish('z', XE - T / 2, -1, Z0, HN + T / 2, { doors: [d(gNurseryDoor), cdStore], windows: [d(gNurseryWin)], dado: true, stripe: true, rail: true });
   finish('z', XW + T / 2, 1, Z0, CN + T / 2, { doors: [d(gWard)], dado: true, stripe: true, rail: true });
   finish('x', Z0, 1, XW + T / 2, XE - T / 2, { dado: true, stripe: true });
   // Waiting room.
@@ -637,6 +643,16 @@ function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: num
   };
   amb(false);
   amb(true);
+  // AMB 1, the first room off the corridor, has its own column scale with stadiometer: a C202
+  // (a copy of the hub's) in the corner beside the sink, back to the east wall, facing the room
+  // and the door; the curtained couch bay starts just south of it. Washed and pooled like the
+  // hub's pieces so it reads from the doorway.
+  const extras: ExtraScale[] = [{ id: 'c202', slot: { x: X1 - 0.06 - 0.3, z: 11.15, rotY: -Math.PI / 2 } }];
+  {
+    const s = extras[0].slot;
+    wallWash(S, 1.2, 1.5, X1 - 0.01, 0.95, s.z, -Math.PI / 2);
+    lightPool(S, 1.4, 1.2, s.x - 0.45, 0.012, s.z);
+  }
 
   // ================================================================== lab
   const labCx = (XL + XA2) / 2;
@@ -808,7 +824,7 @@ function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: num
     m.material = propCluster(k);
   });
   ctx.addStatic(S);
-  return slots;
+  return { slots, extras };
 }
 
 /**
@@ -895,7 +911,7 @@ function visibilityCulling(ctx: WorldContext, inner: { minX: number; maxX: numbe
 const zone: ZoneModule = {
   id: 'medicale',
   build({ ctx, shell }) {
-    return { slots: build(ctx, shell.inner) };
+    return build(ctx, shell.inner);
   },
 };
 export default zone;
