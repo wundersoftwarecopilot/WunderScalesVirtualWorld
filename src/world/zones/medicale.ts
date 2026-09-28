@@ -341,10 +341,16 @@ function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: num
     }
   };
 
-  /** Stainless corner guard on an external corner (two thin angles). */
+  /**
+   * Stainless corner guard wrapping an external corner, 0.1..1.7 m: two 5 cm legs running back
+   * along the faces whose outward normals are sx (x) and sz (z). 15 mm proud, so the dado and
+   * the stripe butt into it instead of covering it.
+   */
   const cornerGuard = (x: number, z: number, sx: 1 | -1, sz: 1 | -1) => {
-    box(S, 'steel', 0.05, 1.6, 0.004, x + (sx * 0.05) / 2, 0.1, z + (sz * 0.004) / 2);
-    box(S, 'steel', 0.004, 1.6, 0.05, x + (sx * 0.004) / 2, 0.1, z + (sz * 0.05) / 2);
+    const a = 0.05;
+    const th = 0.015;
+    box(S, 'steel', a + th, 1.6, th, x - (sx * (a - th)) / 2, 0.1, z + (sz * th) / 2);
+    box(S, 'steel', th, 1.6, a, x + (sx * th) / 2, 0.1, z - (sz * a) / 2);
   };
 
   /** Floor finish (sheet vinyl) for a room rectangle, just above the slab. */
@@ -477,8 +483,9 @@ function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: num
   rbox(S, 'white', 0.05, 1.3, 1.15, 0.012, X0 + 0.025, 1.32, corrZ);
   ctx.logo({ diameter: 0.8, division: 'medicale', style: 'flat' }, { x: X0 + 0.052, y: 2.05, z: corrZ, rotY: Math.PI / 2 });
   wallWash(S, 2.6, 2.3, X0 + 0.02, 1.25, corrZ, Math.PI / 2);
-  // Waiting seats outside the consulting rooms.
-  place(beamSeating(3), -18.75, CS - T / 2 - 0.31, Math.PI);
+  // Waiting seats outside the consulting rooms. Benches on a wall with a bumper rail stand 8 cm
+  // further out so their backrests clear the rail.
+  place(beamSeating(3), -18.75, CS - T / 2 - 0.39, Math.PI);
   place(beamSeating(2), -24.0, CS - T / 2 - 0.31, Math.PI);
   onFace(sanitizer(), 'N', CS - T / 2, -13.05, 1.15);
   onFace(sanitizer(), 'N', CS - T / 2, -17.15, 1.15);
@@ -592,7 +599,8 @@ function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: num
     dc.position.set(1.4, 0, 15.2);
     dc.rotation.y = Math.PI + 0.15;
     R.add(dc);
-    const solids: THREE.Object3D[] = [couch, trolley, step, lamp, dk, dc];
+    // The pulled-back curtains are solid too: nobody walks into the pleats.
+    const solids: THREE.Object3D[] = [c1, c2, couch, trolley, step, lamp, dk, dc];
     for (const [x, r] of [
       [1.05, 0.12],
       [1.95, -0.1],
@@ -671,7 +679,7 @@ function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: num
   onFace(sanitizer(), 'W', XE - T / 2, -1.05, 1.15);
   onFace(sanitizer(), 'E', XW + T / 2, -10.45, 1.15);
   // A bench for relatives in front of the nursery window.
-  place(beamSeating(3), XW + T / 2 + 0.31, -5.1, Math.PI / 2);
+  place(beamSeating(3), XW + T / 2 + 0.39, -5.1, Math.PI / 2);
   place(linenTrolley(), XW + T / 2 + 0.35, -13.6, Math.PI / 2);
   for (let z = -13.85; z < 5; z += 3.2) lightPool(S, 1.6, 2.2, -22.25, 0.012, z);
 

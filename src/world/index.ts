@@ -129,9 +129,12 @@ export async function buildWorld(
       await nextFrame();
     }
   }
-  // Copies after the catalogue, so looking a model up by id finds the catalogue piece first
-  // (loadCatalog has a def, or a stub, for every id).
-  for (const e of extras) place(defs.find((d) => d.spec.id === e.id)!, e.slot, true);
+  // Copies after the catalogue, so looking a model up by id finds the catalogue piece first.
+  for (const e of extras) {
+    const def = defs.find((d) => d.spec.id === e.id);
+    if (def) place(def, e.slot, true);
+    else console.error(`[world] extra scale ${e.id}: no model in the catalogue`);
+  }
 
   // Drive weighing: stepping onto a floor platform, or walking up to a table-top piece.
   ctx.onUpdate((dt, t) => {

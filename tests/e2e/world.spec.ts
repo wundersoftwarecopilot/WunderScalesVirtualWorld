@@ -120,10 +120,15 @@ test('walking onto a floor scale starts a weighing', async ({ page }) => {
   // first consulting room's own C202 (a copy, reached between the sink and the couch bay).
   const targets = await page.evaluate(() => {
     const all = window.__wunder!.scales;
-    return [all.findIndex((p) => p.spec.id === 'r2020'), all.findIndex((p) => p.spec.id === 'r150-gold'), all.findIndex((p) => p.copy && p.spec.id === 'c202')];
+    const at = (label: string, i: number) => ({ label, i });
+    return [
+      at('r2020', all.findIndex((p) => p.spec.id === 'r2020')),
+      at('r150-gold', all.findIndex((p) => p.spec.id === 'r150-gold')),
+      at('c202 copy in AMB 1', all.findIndex((p) => p.copy && p.spec.id === 'c202')),
+    ];
   });
-  for (const i of targets) {
-    expect(i).toBeGreaterThanOrEqual(0);
+  for (const { label, i } of targets) {
+    expect(i, label).toBeGreaterThanOrEqual(0);
     const start = await page.evaluate((i) => {
       const s = window.__wunder!.scales[i];
       const so = s?.instance.standOn;
@@ -137,11 +142,11 @@ test('walking onto a floor scale starts a weighing', async ({ page }) => {
       const out = so.d / 2 + 1.0;
       return { x: cx + n * out, z: cz + c * out, yaw: s.slot.rotY };
     }, i);
-    expect(start, `scale #${i}`).not.toBeNull();
+    expect(start, label).not.toBeNull();
     await page.evaluate((s) => window.__wunder!.player.teleport(s!.x, s!.z, s!.yaw), start);
     const f0 = await page.evaluate(() => window.__wunder!.frames);
     await page.waitForFunction((f) => window.__wunder!.frames > f + 2, f0, { timeout: 60_000 });
-    expect(await page.evaluate((i) => window.__wunder!.scales[i].active, i), `scale #${i}`).toBe(false);
+    expect(await page.evaluate((i) => window.__wunder!.scales[i].active, i), label).toBe(false);
     // Walk forward until the platform weighs the visitor: a collider in the way would stop them
     // short of it and time out here.
     await page.keyboard.down('ArrowUp');

@@ -78,7 +78,7 @@ URL → colliders → one updater drives `weigh(active)`: stepping into `standOn
 **Catalogue**: `src/scales/specs.ts` is the source of truth (ids, line, placement, product URL,
 approx size). `catalog.ts` globs `scales/{medicale,industriale,design}/*.ts`; files starting with
 `_` are shared helpers without a default export; a missing id falls back to `stub.ts`, so the world
-always has 30 pieces. Geometry recipes live in `docs/catalog-research.md`.
+always has its 30 catalogue pieces. Geometry recipes live in `docs/catalog-research.md`.
 
 **Links (`src/core/links.ts`)**: Artifact viewers block `window.open`, so every visible, unoccluded
 logo gets a transparent real `<a target=_blank>` positioned over its projected bounds each frame
@@ -123,9 +123,10 @@ context restore, because three.js otherwise overrides `envMapIntensity` with the
 
 - `window.__wunder`: `ready`, `frames`, `player` (`teleport(x, z, yaw, pitch)`, `zoom`), `input`
   (`locked`, `lockUnavailable`, `pointerType`, `setIntent`), `links` (`links`, `aimed`), `hud`
-  (`clickHintShown`, `escHintShown`, `center(intent)`), `scene`, `scales` (placed instances),
-  `teleport(<viewpoint>)`, `stats()` (calls, triangles, culled). Named viewpoints: `VIEWPOINTS` in
-  `world/layout.ts` (also `?view=<name>` in dev). Yaw 0 looks north (−Z), +π/2 west.
+  (`clickHintShown`, `escHintShown`, `center(intent)`), `scene`, `scales` (placed instances: the 30
+  catalogue pieces first, then zone `extras` with `copy: true`), `teleport(<viewpoint>)`, `stats()`
+  (calls, triangles, culled). Named viewpoints: `VIEWPOINTS` in `world/layout.ts` (also
+  `?view=<name>` in dev). Yaw 0 looks north (−Z), +π/2 west.
 - `lab.html?scale=<id>&angle=..&elev=..&zoom=..&fy=..&weigh=1`, `lab.html?all=<line>`; `window.__lab.errors`
   reports size mismatches (±35%) and models above 60 draw objects after merging.
 
