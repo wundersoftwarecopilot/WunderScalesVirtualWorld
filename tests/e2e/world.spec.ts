@@ -55,9 +55,11 @@ test('the world boots, renders, and shows no text', async ({ page }) => {
   const catalogue = scales.filter((s) => !s.copy);
   expect(catalogue).toHaveLength(30);
   for (const line of ['medicale', 'industriale', 'design']) expect(catalogue.filter((s) => s.line === line)).toHaveLength(10);
-  // The first consulting room (AMB 1: x −15.1..−10.15, z 10.3..15.85) has its own column scale.
-  const amb1 = scales.filter((s) => s.copy && s.x > -15.1 && s.x < -10.15 && s.z > 10.3 && s.z < 15.85);
-  expect(amb1.map((s) => s.id)).toEqual(['c202']);
+  // Each consulting room (z 10.3..15.85; AMB 1 x −15.1..−10.15, AMB 2 x −20.05..−15.1) has its
+  // own column scale.
+  const room = (x0: number, x1: number) => scales.filter((s) => s.copy && s.x > x0 && s.x < x1 && s.z > 10.3 && s.z < 15.85).map((s) => s.id);
+  expect(room(-15.1, -10.15), 'AMB 1').toEqual(['c202']);
+  expect(room(-20.05, -15.1), 'AMB 2').toEqual(['c202']);
 
   expect(errors.filter((e) => !benign(e))).toEqual([]);
 });
@@ -117,14 +119,15 @@ test('walking onto a floor scale starts a weighing', async ({ page }) => {
   await openArtifact(page, errors);
   await page.locator('#gl').focus();
   // A medicale column scale (the platform is partly under its column), the gallery hero and the
-  // first consulting room's own C202 (a copy, reached between the sink and the couch bay).
+  // consulting rooms' own C202s (copies, reached between the sink and the couch bay).
   const targets = await page.evaluate(() => {
     const all = window.__wunder!.scales;
     const at = (label: string, i: number) => ({ label, i });
     return [
       at('r2020', all.findIndex((p) => p.spec.id === 'r2020')),
       at('r150-gold', all.findIndex((p) => p.spec.id === 'r150-gold')),
-      at('c202 copy in AMB 1', all.findIndex((p) => p.copy && p.spec.id === 'c202')),
+      at('c202 copy in AMB 1', all.findIndex((p) => p.copy && p.spec.id === 'c202' && p.slot.x > -15.1)),
+      at('c202 copy in AMB 2', all.findIndex((p) => p.copy && p.spec.id === 'c202' && p.slot.x < -15.1)),
     ];
   });
   for (const { label, i } of targets) {

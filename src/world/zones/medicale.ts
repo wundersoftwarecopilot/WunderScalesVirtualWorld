@@ -73,7 +73,7 @@ import {
  *   z 5.65   ├────[opening]─────┘     └───────────────────────┬─────┤
  *            │ logo  ═══ MAIN CORRIDOR (grey band)  ═══             ← lobby
  *   z 10.3   ├──────┬──────┬────────────┬───────────┬──────────┤
- *            │ util │ util │ LAB (glazed)│ AMB 2    │ AMB 1 C202│
+ *            │ util │ util │ LAB (glazed)│ AMB 2 C202│ AMB 1 C202│
  *   z 15.85  └──────┴──────┴────────────┴───────────┴──────────┘
  *          x −33.85      −26.2       −20.05      −15.1       −10.15
  *
@@ -83,7 +83,7 @@ import {
  *   facing south, a nurse counter by the east wall. The WBA300 stands at the mouth of the N-S
  *   corridor facing east, in the sightline from the lobby doorway.
  * - Two consulting rooms (ambulatori), mirror images: couch with curtain track, desk, chairs,
- *   sink cabinet, light box, BP unit, exam lamp, frosted window. AMB 1 also has its own C202
+ *   sink cabinet, light box, BP unit, exam lamp, frosted window. Each also has its own C202
  *   (a copy of the hub's, `extras`) in the corner by the sink.
  * - Ward off the N-S corridor: PL-VEGA in a curtained bay (3.4 × 3.9 m) with a bed-head unit,
  *   DE20 beside it, RW2.0-SEDIA with a free run-up in front of its ramp and a wheelchair.
@@ -651,15 +651,19 @@ function build(ctx: WorldContext, inner: { minX: number; maxX: number; minZ: num
   };
   amb(false);
   amb(true);
-  // AMB 1, the first room off the corridor, has its own column scale with stadiometer: a C202
-  // (a copy of the hub's) in the corner beside the sink, back to the east wall, facing the room
-  // and the door; the curtained couch bay starts just south of it. Washed and pooled like the
-  // hub's pieces so it reads from the doorway.
-  const extras: ExtraScale[] = [{ id: 'c202', slot: { x: X1 - 0.06 - 0.3, z: 11.15, rotY: -Math.PI / 2 } }];
-  {
-    const s = extras[0].slot;
-    wallWash(S, 1.2, 1.5, X1 - 0.01, 0.95, s.z, -Math.PI / 2);
-    lightPool(S, 1.4, 1.2, s.x - 0.45, 0.012, s.z);
+  // Each consulting room has its own column scale with stadiometer: a C202 (a copy of the hub's)
+  // in the corner beside the sink, back to the outer wall (AMB 1 east, AMB 2 west), facing the
+  // room and the door; the curtained couch bay starts just south of it. Washed and pooled like
+  // the hub's pieces so it reads from the doorway. `dir` points from that wall into the room.
+  const extras: ExtraScale[] = [];
+  for (const [wallX, dir] of [
+    [X1, -1],
+    [XA2 + T / 2, 1],
+  ] as const) {
+    const slot = { x: wallX + dir * (0.06 + 0.3), z: 11.15, rotY: (dir * Math.PI) / 2 };
+    extras.push({ id: 'c202', slot });
+    wallWash(S, 1.2, 1.5, wallX + dir * 0.01, 0.95, slot.z, (dir * Math.PI) / 2);
+    lightPool(S, 1.4, 1.2, slot.x + dir * 0.45, 0.012, slot.z);
   }
 
   // ================================================================== lab
